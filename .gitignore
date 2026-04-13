@@ -1,0 +1,58 @@
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env
+*.env
+!.env.example
+
+# ── Virtual env / uv ────────────────────────────────────────────────────────
+.uv/
+uv.lock
+.python-version
+
+# ── Node / Next.js ──────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/.env.*.local
+!frontend/.env.local.example
+frontend/tsconfig.tsbuildinfo
+
+# ── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+desktop.ini
+
+# ── IDE ──────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Testing ──────────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.log
+*.pid
+*.seed
+*.pid.lock
+alembic/versions/*.pyc

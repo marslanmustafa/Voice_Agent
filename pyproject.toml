@@ -1,0 +1,27 @@
+[project]
+name = "voice-agent"
+version = "1.0.0"
+description = "VoiceAgent — AI Calling Platform Backend"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "httpx>=0.28.1",
+    "python-dotenv>=1.1.0",
+    "pydantic[email]>=2.11.0",
+    "pydantic-settings>=2.9.0",
+    # Database
+    "sqlalchemy>=2.0.40",
+    "asyncpg>=0.30.0",
+    "alembic>=1.15.0",
+    # Auth
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[argon2,bcrypt]>=1.7.4",
+    # Utils
+    "python-multipart>=0.0.20",
+    "aiofiles>=24.1.0",
+    "phonenumbers>=8.13.52",
+    "greenlet>=3.4.0",
+    "argon2-cffi>=25.1.0",
+]
