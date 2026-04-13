@@ -102,7 +102,7 @@ export default function CampaignDetailPage() {
           ].map(([label, value, color]) => (
             <div key={label as string} className="flex flex-col gap-1 p-3.5 rounded-[10px] border" style={S.card}>
               <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--color-text2)" }}>{label}</span>
-              <span className="text-[18px] font-bold" style={{ color, fontFamily: "var(--font-disp)" }}>{value}</span>
+              <span className="text-[18px] font-bold" style={{ color: color as string, fontFamily: "var(--font-disp)" }}>{value}</span>
             </div>
           ))}
         </div>

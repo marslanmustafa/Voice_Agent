@@ -30,7 +30,7 @@ export interface Campaign {
   name: string;
   topic?: string;
   vapi_campaign_id?: string;
-  status: "draft" | "created" | "queued" | "running" | "done" | "completed" | "cancelled" | "unknown";
+  status: "draft" | "created" | "queued" | "running" | "done" | "completed" | "cancelled" | "scheduled" | "unknown";
   created_at: string;
   contact_count: number;
   call_count: number;
