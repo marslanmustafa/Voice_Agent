@@ -117,6 +117,7 @@ async def dial_call(
             
         return {"ok": True, "call_id": resp.get("id"), "listen_url": listen_url}
     except Exception as e:
+        print(f"!!! CRITICAL VAPI POST ERRROR: {e}")
         raise HTTPException(status_code=502, detail=f"Vapi error: {str(e)}")
 
 
