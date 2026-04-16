@@ -1,115 +1,75 @@
-import { useState, useEffect, useRef } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 
 export function useLiveAudio(listenUrl: string | undefined | null) {
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const nextStartTimeRef = useRef<number>(0);
+  const nextPlayTimeRef = useRef<number>(0);
 
-  const startListening = () => {
-    if (!listenUrl) {
-      setError("No listen URL provided");
-      return;
-    }
-    
-    setError(null);
-    setIsListening(true);
-    
-    try {
-      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-      audioCtxRef.current = new AudioContext({ sampleRate: 16000 });
-      nextStartTimeRef.current = audioCtxRef.current.currentTime;
-      
-      const ws = new WebSocket(listenUrl);
-      ws.binaryType = "arraybuffer";
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        console.log("Connected to Live Call Stream");
-      };
-
-      ws.onmessage = (event) => {
-        if (event.data instanceof ArrayBuffer) {
-          // Vapi stream provides raw binary payload
-          playPCM16(event.data);
-        } else if (typeof event.data === 'string') {
-           // JSON payload (like {"type": "media", "media": {"payload": "..."}})
-           try {
-             const parsed = JSON.parse(event.data);
-             if (parsed.type === "media" && parsed.media?.payload) {
-                const binaryString = window.atob(parsed.media.payload);
-                const len = binaryString.length;
-                const bytes = new Uint8Array(len);
-                for (let i = 0; i < len; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
-                playPCM16(bytes.buffer);
-             }
-           } catch(e) {}
-        }
-      };
-
-      ws.onerror = (err) => {
-        console.error("Live Audio WS Error:", err);
-        setError("Stream connection failed.");
-        stopListening();
-      };
-      
-      ws.onclose = () => {
-        setIsListening(false);
-      };
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Failed to start audio context.");
-      setIsListening(false);
-    }
-  };
-
-  const playPCM16 = (buffer: ArrayBuffer) => {
-    if (!audioCtxRef.current) return;
-    
-    const ctx = audioCtxRef.current;
-    // Assuming 16-bit PCM @ 16kHz
-    const int16 = new Int16Array(buffer);
-    const float32 = new Float32Array(int16.length);
-    for (let i = 0; i < int16.length; i++) {
-      float32[i] = int16[i] / 32768.0;
-    }
-
-    const audioBuffer = ctx.createBuffer(1, float32.length, 16000);
-    audioBuffer.getChannelData(0).set(float32);
-
-    const source = ctx.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(ctx.destination);
-
-    // Schedule slightly in the future to avoid jitter
-    if (nextStartTimeRef.current < ctx.currentTime) {
-      nextStartTimeRef.current = ctx.currentTime + 0.1;
-    }
-    
-    source.start(nextStartTimeRef.current);
-    nextStartTimeRef.current += audioBuffer.duration;
-  };
-
-  const stopListening = () => {
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    if (audioCtxRef.current) {
-      audioCtxRef.current.close();
-      audioCtxRef.current = null;
-    }
+  const stopListening = useCallback(() => {
+    wsRef.current?.close();
+    wsRef.current = null;
+    audioCtxRef.current?.close();
+    audioCtxRef.current = null;
+    nextPlayTimeRef.current = 0;
     setIsListening(false);
-  };
-
-  useEffect(() => {
-    return () => {
-      stopListening();
-    };
   }, []);
 
+  const startListening = useCallback(() => {
+    if (!listenUrl || wsRef.current) return;
+    setError(null);
+
+    // Vapi streams 8kHz µ-law PCM — AudioContext must be created after a user gesture
+    const ctx = new AudioContext({ sampleRate: 8000 });
+    audioCtxRef.current = ctx;
+    nextPlayTimeRef.current = ctx.currentTime;
+
+    const ws = new WebSocket(listenUrl);
+    ws.binaryType = "arraybuffer";
+    wsRef.current = ws;
+
+    ws.onopen = () => setIsListening(true);
+    ws.onerror = () => setError("WebSocket connection failed");
+    ws.onclose = () => setIsListening(false);
+
+    ws.onmessage = (evt) => {
+      if (!(evt.data instanceof ArrayBuffer)) return;
+      const raw = new Uint8Array(evt.data);
+
+      // Decode µ-law to linear PCM float32
+      const pcm = new Float32Array(raw.length);
+      for (let i = 0; i < raw.length; i++) {
+        pcm[i] = mulawToLinear(raw[i]) / 32768.0;
+      }
+
+      const buffer = ctx.createBuffer(1, pcm.length, 8000);
+      buffer.copyToChannel(pcm, 0);
+
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+
+      // Schedule chunks sequentially to avoid gaps/glitches
+      const startAt = Math.max(nextPlayTimeRef.current, ctx.currentTime);
+      source.start(startAt);
+      nextPlayTimeRef.current = startAt + buffer.duration;
+    };
+  }, [listenUrl]);
+
+  // Stop when URL changes or component unmounts
+  useEffect(() => () => stopListening(), [stopListening]);
+
   return { isListening, startListening, stopListening, error };
+}
+
+// ITU-T G.711 µ-law to linear16 decoder
+function mulawToLinear(mulaw: number): number {
+  mulaw = ~mulaw & 0xff;
+  const sign = mulaw & 0x80;
+  const exp = (mulaw >> 4) & 0x07;
+  const mantissa = mulaw & 0x0f;
+  let sample = ((mantissa << 3) + 0x84) << exp;
+  sample -= 0x84;
+  return sign ? -sample : sample;
 }

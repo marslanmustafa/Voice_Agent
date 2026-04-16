@@ -7,7 +7,7 @@ import {
   FiArrowLeft, FiPhone, FiMic, FiClock, FiPlay, FiStopCircle, FiCheck, FiRadio,
   FiChevronRight, FiUser, FiTrash2,
 } from "react-icons/fi";
-import { useGetCampaignQuery, useLaunchCampaignMutation, useCancelCampaignMutation, useGetCallsQuery, useGetCallQuery, useEndCallMutation } from "@/store/api/allApis";
+import { useGetCampaignQuery, useStartCampaignMutation, useControlCampaignMutation, useGetCallsQuery, useGetCallQuery, useEndCallMutation } from "@/store/api/allApis";
 import { fmtDuration } from "@/lib/utils";
 
 const STATUS_META: Record<string, { color: string; label: string }> = {
@@ -40,8 +40,8 @@ export default function CampaignDetailPage() {
   const { data: campaign, isLoading: campLoading } = useGetCampaignQuery(id);
   const { data: callsData, isLoading: callsLoading, refetch } = useGetCallsQuery({ campaign_id: id });
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
-  const [launchCampaign] = useLaunchCampaignMutation();
-  const [cancelCampaign] = useCancelCampaignMutation();
+  const [startCampaign] = useStartCampaignMutation();
+  const [controlCampaign] = useControlCampaignMutation();
 
   if (campLoading) return <LoadingState />;
   if (!campaign) return <NotFoundState />;
@@ -80,12 +80,12 @@ export default function CampaignDetailPage() {
           {/* Campaign controls */}
           <div className="flex gap-2 items-center">
             {campaign.status !== "running" && campaign.status !== "completed" && (
-              <button style={S.btnPrimary} onClick={async () => { await launchCampaign(id); refetch(); }}>
+              <button style={S.btnPrimary} onClick={async () => { await startCampaign({ campaignId: id }); refetch(); }}>
                 <FiPlay size={12}/> Launch Campaign
               </button>
             )}
             {campaign.status === "running" && (
-              <button style={S.btnDanger} onClick={async () => { if (!confirm("Cancel this campaign?")) return; await cancelCampaign(id); }}>
+              <button style={S.btnDanger} onClick={async () => { if (!confirm("Cancel this campaign?")) return; await controlCampaign({ campaignId: id, action: "stop" }); }}>
                 <FiStopCircle size={12}/> Cancel Campaign
               </button>
             )}

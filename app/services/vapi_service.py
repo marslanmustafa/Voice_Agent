@@ -36,7 +36,7 @@ async def create_outbound_call(
         payload["phoneNumber"] = {
             "twilioPhoneNumber": settings.TWILIO_PHONE_NUMBER,
             "twilioAccountSid": settings.TWILIO_ACCOUNT_SID,
-            "twilioAuthToken": settings.TWILIO_AUTH_TOKEN
+            "twilioAuthToken": settings.TWILIO_AUTH_TOKEN,
         }
 
     overrides = {}
@@ -51,16 +51,17 @@ async def create_outbound_call(
             overrides["model"] = assistant_model
         except Exception as e:
             logger.warning(f"[VAPI] Failed to fetch assistant for override: {e}")
-            overrides["model"] = {"provider": "openai", "model": "gpt-4", "messages": [{"role": "system", "content": system_prompt}]}
+            overrides["model"] = {"provider": "openai", "model": "gpt-4o", "messages": [{"role": "system", "content": system_prompt}]}
 
     overrides["recordingEnabled"] = True
     overrides["artifactPlan"] = {"recordingEnabled": True}
-    overrides["monitorPlan"] = {"listenEnabled": True}
+    overrides["monitorPlan"] = {"listenEnabled": True, "controlEnabled": True}
 
     payload["assistantOverrides"] = overrides
 
     # Try primary route, fall back to older routes on 404
-    resp = await vapi_post("/call/phone/outbound", json=payload)
+    resp = await vapi_post("/call", json=payload)
+    print("resp", resp)
     return resp
 
 

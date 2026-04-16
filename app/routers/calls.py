@@ -103,7 +103,10 @@ async def dial_call(
     user_config = await db.scalar(select(UserConfig).where(UserConfig.user_id == user.id))
     if not user_config or not user_config.vapi_assistant_id:
         raise HTTPException(status_code=400, detail="Vapi Assistant ID not configured")
-
+    print("user_config.vapi_assistant_id", user_config.vapi_assistant_id)
+    print("body.phone_to", body.phone_to)
+    print("body.first_message", body.first_message)
+    print("body.system_prompt", body.system_prompt)
     try:
         resp = await vapi_service.create_outbound_call(
             assistant_id=user_config.vapi_assistant_id,

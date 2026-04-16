@@ -49,6 +49,23 @@ async def list_campaigns(
     return CampaignListResponse(campaigns=responses, total=len(responses))
 
 
+@router.get("/phone-numbers")
+async def list_phone_numbers(
+    user: User = Depends(get_current_user),
+):
+    """
+    List available phone numbers from Vapi.
+    """
+    try:
+        resp = await vapi_service.list_phone_numbers()
+        return resp
+    except VapiError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except Exception as e:
+        logger.exception("Unexpected error in list_phone_numbers")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{campaign_id}")
 async def get_campaign(
     campaign_id: str,

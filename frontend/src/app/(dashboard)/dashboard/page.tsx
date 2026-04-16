@@ -42,7 +42,7 @@ function QuickAction({ href, icon, label, desc, accent }: { href: string; icon: 
 export default function DashboardPage() {
   const { data: session }    = useSession();
   const { data: contacts }   = useGetContactsQuery({});
-  const { data: campaigns }  = useGetCampaignsQuery({});
+  const { data: campaigns }  = useGetCampaignsQuery();
   const { data: calls }      = useGetCallsQuery({});
 
   const totalContacts  = contacts?.total ?? 0;
