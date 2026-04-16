@@ -6,10 +6,11 @@ GET  /calls/{id}       — detail with Vapi real-time fetching
 POST /calls/{id}/end   — terminate active call via Vapi
 """
 
+import logging
 from typing import Optional
-from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from dateutil import parser
@@ -21,35 +22,37 @@ from app.schemas.campaigns import (
     CallDetailResponse, CallListResponse, CallResponse, TranscriptSegmentResponse,
 )
 from app.services import vapi_service
+from app.utils.exceptions import VapiError
 
 router = APIRouter(prefix="/calls", tags=["calls"])
+logger = logging.getLogger(__name__)
+
 
 class DialRequest(BaseModel):
     phone_to: str
     system_prompt: Optional[str] = None
     first_message: Optional[str] = None
 
+
 def _parse_vapi_call(v: dict, contact_map: dict) -> CallResponse:
-    # customer details
     customer = v.get("customer", {})
     phone_to = customer.get("number", "Unknown")
     phone_from = v.get("phoneNumber", {}).get("number", "Unknown") if v.get("phoneNumber") else "Unknown"
-    
-    # Calculate duration
+
     duration_secs = 0
     if v.get("endedAt") and v.get("startedAt"):
         try:
             start = parser.parse(v["startedAt"])
             end = parser.parse(v["endedAt"])
             duration_secs = int((end - start).total_seconds())
-        except:
+        except Exception:
             duration_secs = 0
 
     return CallResponse(
         id=v.get("id"),
         vapi_call_id=v.get("id"),
         campaign_id=v.get("campaignId"),
-        contact_id=contact_map.get(phone_to), # Mapping back locally if found
+        contact_id=contact_map.get(phone_to),
         phone_to=phone_to,
         phone_from=phone_from,
         status=v.get("status", "unknown"),
@@ -72,13 +75,12 @@ async def list_calls(
     user_config = await db.scalar(select(UserConfig).where(UserConfig.user_id == user.id))
     if not user_config or not user_config.vapi_assistant_id:
         return CallListResponse(calls=[], total=0)
-        
+
     try:
         raw_calls = await vapi_service.list_calls(user_config.vapi_assistant_id, limit=page_size)
-    except Exception as e:
+    except VapiError:
         raw_calls = []
 
-    # Map phones to local contact IDs playfully
     phones = [c.get("customer", {}).get("number") for c in raw_calls if c.get("customer", {}).get("number")]
     contact_map = {}
     if phones:
@@ -107,18 +109,20 @@ async def dial_call(
             assistant_id=user_config.vapi_assistant_id,
             customer_number=body.phone_to,
             first_message=body.first_message,
-            system_prompt=body.system_prompt
+            system_prompt=body.system_prompt,
         )
-        # Extract monitor listenUrl safely if provided
         listen_url = None
         monitor_block = resp.get("monitor", {})
         if isinstance(monitor_block, dict):
             listen_url = monitor_block.get("listenUrl")
-            
+
         return {"ok": True, "call_id": resp.get("id"), "listen_url": listen_url}
+    except VapiError as e:
+        logger.error(f"[VAPI] Dial error {e.status_code}: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
-        print(f"!!! CRITICAL VAPI POST ERRROR: {e}")
-        raise HTTPException(status_code=502, detail=f"Vapi error: {str(e)}")
+        logger.exception("Unexpected error in dial_call")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{call_id}", response_model=CallDetailResponse)
@@ -130,10 +134,9 @@ async def get_call(
     try:
         vapi_data = await vapi_service.get_call(call_id)
         vapi_transcript = await vapi_service.get_call_transcript(call_id)
-    except Exception as e:
-        raise HTTPException(status_code=404, detail="Call not found in Vapi")
+    except VapiError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
-    # Map phone
     phone_to = vapi_data.get("customer", {}).get("number")
     contact_map = {}
     if phone_to:
@@ -161,6 +164,9 @@ async def terminate_call(
 ):
     try:
         await vapi_service.end_call(call_id)
+    except VapiError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Vapi error: {str(e)}")
+        logger.exception("Unexpected error in terminate_call")
+        raise HTTPException(status_code=500, detail=str(e))
     return {"ok": True}

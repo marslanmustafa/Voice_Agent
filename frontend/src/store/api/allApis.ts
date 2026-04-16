@@ -38,31 +38,40 @@ export const {
 // ── Campaigns ─────────────────────────────────────────────────────────────────
 export const campaignsApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
-    getCampaigns: b.query<{ campaigns: Campaign[]; total: number }, { status?: string }>({
-      query: (p) => ({ url: "/campaigns", params: p }),
+    getCampaigns: b.query<{ campaigns: any[]; total: number }, void>({
+      query: () => "/campaigns",
       providesTags: ["Campaigns"],
     }),
-    getCampaign: b.query<Campaign, string>({
+    getCampaign: b.query<any, string>({
       query: (id) => `/campaigns/${id}`,
+      providesTags: ["Campaigns"],
     }),
-    createCampaign: b.mutation<Campaign, Partial<Campaign> & { contact_ids?: string[] }>({
-      query: (body) => ({ url: "/campaigns", method: "POST", body }),
+    getPhoneNumbers: b.query<any[], void>({
+      query: () => "/campaigns/phone-numbers",
+      providesTags: ["Campaigns"],
+    }),
+    createCampaign: b.mutation<any, any>({
+      query: (body) => ({ url: "/campaigns/create", method: "POST", body }),
       invalidatesTags: ["Campaigns"],
     }),
-    updateCampaign: b.mutation<Campaign, { id: string; data: Partial<Campaign> }>({
-      query: ({ id, data }) => ({ url: `/campaigns/${id}`, method: "PUT", body: data }),
+    updateCampaign: b.mutation<any, { id: string; data: any }>({
+      query: ({ id, data }) => ({ url: `/campaigns/${id}`, method: "PATCH", body: data }),
+      invalidatesTags: ["Campaigns"],
+    }),
+    addCampaignContacts: b.mutation<{ ok: boolean; message: string }, { campaignId: string; customers: any[] }>({
+      query: ({ campaignId, customers }) => ({ url: `/campaigns/${campaignId}/contacts`, method: "POST", body: customers }),
+      invalidatesTags: ["Campaigns"],
+    }),
+    startCampaign: b.mutation<{ ok: boolean; message: string }, { campaignId: string; customers?: any[] }>({
+      query: ({ campaignId, customers }) => ({ url: `/campaigns/${campaignId}/start`, method: "POST", body: customers || [] }),
+      invalidatesTags: ["Campaigns"],
+    }),
+    controlCampaign: b.mutation<{ ok: boolean; message: string }, { campaignId: string; action: string }>({
+      query: ({ campaignId, action }) => ({ url: `/campaigns/${campaignId}/control?action=${action}`, method: "PATCH" }),
       invalidatesTags: ["Campaigns"],
     }),
     deleteCampaign: b.mutation<void, string>({
-      query: (id) => ({ url: `/campaigns/${id}`, method: "DELETE" }),
-      invalidatesTags: ["Campaigns"],
-    }),
-    launchCampaign: b.mutation<{ ok: boolean; message: string }, string>({
-      query: (id) => ({ url: `/campaigns/${id}/launch`, method: "POST" }),
-      invalidatesTags: ["Campaigns"],
-    }),
-    cancelCampaign: b.mutation<{ ok: boolean; message: string }, string>({
-      query: (id) => ({ url: `/campaigns/${id}/cancel`, method: "POST" }),
+      query: (campaignId) => ({ url: `/campaigns/${campaignId}`, method: "DELETE" }),
       invalidatesTags: ["Campaigns"],
     }),
   }),
@@ -71,11 +80,13 @@ export const campaignsApi = baseApi.injectEndpoints({
 export const {
   useGetCampaignsQuery,
   useGetCampaignQuery,
+  useGetPhoneNumbersQuery,
   useCreateCampaignMutation,
   useUpdateCampaignMutation,
+  useAddCampaignContactsMutation,
+  useStartCampaignMutation,
+  useControlCampaignMutation,
   useDeleteCampaignMutation,
-  useLaunchCampaignMutation,
-  useCancelCampaignMutation,
 } = campaignsApi;
 
 // ── Calls ─────────────────────────────────────────────────────────────────────

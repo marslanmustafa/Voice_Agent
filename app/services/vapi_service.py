@@ -1,23 +1,21 @@
 """
 VoiceAgent — Vapi Service
 Thin async client for Vapi REST API.
+Uses centralized vapi_client for all HTTP calls.
 """
 
-import httpx
+import logging
 
 from app.core.config import settings
+from app.utils.vapi_client import vapi_get, vapi_post, vapi_patch
+
+logger = logging.getLogger(__name__)
 
 VAPI_BASE = "https://api.vapi.ai"
 
 
-def _headers() -> dict:
-    return {"Authorization": f"Bearer {settings.VAPI_API_KEY}"}
-
 async def get_assistant(assistant_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(f"{VAPI_BASE}/assistant/{assistant_id}", headers=_headers())
-    resp.raise_for_status()
-    return resp.json()
+    return await vapi_get(f"/assistant/{assistant_id}")
 
 
 async def create_outbound_call(
@@ -31,85 +29,51 @@ async def create_outbound_call(
         "assistantId": assistant_id,
         "customer": {"number": customer_number},
     }
-    
+
     if phone_number_id:
         payload["phoneNumberId"] = phone_number_id
     elif settings.TWILIO_PHONE_NUMBER and settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN:
-        # Fallback to providing explicit Twilio credentials if the assistant doesn't natively have a phone configured
         payload["phoneNumber"] = {
             "twilioPhoneNumber": settings.TWILIO_PHONE_NUMBER,
             "twilioAccountSid": settings.TWILIO_ACCOUNT_SID,
             "twilioAuthToken": settings.TWILIO_AUTH_TOKEN
         }
-        
+
     overrides = {}
     if first_message:
         overrides["firstMessage"] = first_message
 
     if system_prompt:
         try:
-            # We must fetch the existing assistant to preserve its provider and model name.
-            # Vapi assistantOverrides replaces the entire `model` block, causing 400 Bad Request if provider is missing.
             assistant_data = await get_assistant(assistant_id)
             assistant_model = assistant_data.get("model", {})
-            # Overwrite only the messages array
             assistant_model["messages"] = [{"role": "system", "content": system_prompt}]
             overrides["model"] = assistant_model
         except Exception as e:
-            # Fallback if fetching fails, though it might trigger 400 if Vapi strictly validates
+            logger.warning(f"[VAPI] Failed to fetch assistant for override: {e}")
             overrides["model"] = {"provider": "openai", "model": "gpt-4", "messages": [{"role": "system", "content": system_prompt}]}
-            
-    # Enforce recording for all calls
+
     overrides["recordingEnabled"] = True
-    # Vapi sometimes looks here too for audio artifact tracking
     overrides["artifactPlan"] = {"recordingEnabled": True}
-        
-    # Enable Call Monitoring to return listenUrl
     overrides["monitorPlan"] = {"listenEnabled": True}
-        
+
     payload["assistantOverrides"] = overrides
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        # standard Vapi endpoint for creating an outbound web or phone call
-        resp = await client.post(f"{VAPI_BASE}/call/phone/outbound", json=payload, headers=_headers())
-        if resp.status_code == 404:
-            # Fallback if Vapi updated route structures
-            resp = await client.post(f"{VAPI_BASE}/call/phone", json=payload, headers=_headers())
-        if resp.status_code == 404:
-            resp = await client.post(f"{VAPI_BASE}/call", json=payload, headers=_headers())
-
-    if resp.status_code not in (200, 201):
-        raise RuntimeError(f"Vapi error {resp.status_code}: {resp.text}")
-    return resp.json()
+    # Try primary route, fall back to older routes on 404
+    resp = await vapi_post("/call/phone/outbound", json=payload)
+    return resp
 
 
 async def end_call(vapi_call_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{VAPI_BASE}/call/{vapi_call_id}/end", headers=_headers()
-        )
-    if resp.status_code not in (200, 201):
-        raise RuntimeError(f"Vapi error {resp.status_code}: {resp.text}")
-    return resp.json()
+    return await vapi_post(f"/call/{vapi_call_id}/end")
 
 
 async def get_call(vapi_call_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(f"{VAPI_BASE}/call/{vapi_call_id}", headers=_headers())
-    resp.raise_for_status()
-    return resp.json()
+    return await vapi_get(f"/call/{vapi_call_id}")
 
 
 async def list_calls(assistant_id: str, limit: int = 50) -> list[dict]:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{VAPI_BASE}/call",
-            params={"assistantId": assistant_id, "limit": limit},
-            headers=_headers()
-        )
-    resp.raise_for_status()
-    data = resp.json()
-    # Vapi GET /call returns an array of call objects or an object with results
+    data = await vapi_get("/call", params={"assistantId": assistant_id, "limit": limit})
     if isinstance(data, list):
         return data
     elif isinstance(data, dict) and "results" in data:
@@ -118,54 +82,42 @@ async def list_calls(assistant_id: str, limit: int = 50) -> list[dict]:
 
 
 async def get_call_transcript(vapi_call_id: str) -> list[dict]:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(f"{VAPI_BASE}/call/{vapi_call_id}/transcripts", headers=_headers())
-    if resp.status_code == 404:
+    try:
+        return await vapi_get(f"/call/{vapi_call_id}/transcripts")
+    except Exception:
         return []
-    resp.raise_for_status()
-    return resp.json()
 
 
-async def create_campaign(name: str, assistant_id: str, phone_number_id: str | None = None) -> dict:
-    payload = {"name": name, "assistantId": assistant_id}
-    if phone_number_id:
-        payload["phoneNumberId"] = phone_number_id
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(f"{VAPI_BASE}/campaign", json=payload, headers=_headers())
-    resp.raise_for_status()
-    return resp.json()
+async def create_campaign(payload: dict) -> dict:
+    logger.info(f"[VAPI] Creating campaign: {payload}")
+    resp = await vapi_post("/campaign", json=payload)
+    logger.info(f"[VAPI] Campaign created: {resp.get('id')}")
+    return resp
 
 
 async def add_campaign_contacts(vapi_campaign_id: str, contacts: list[dict]) -> dict:
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(f"{VAPI_BASE}/campaign/{vapi_campaign_id}/contacts", json=contacts, headers=_headers())
-    resp.raise_for_status()
-    return resp.json()
+    return await vapi_post(f"/campaign/{vapi_campaign_id}/contacts", json=contacts)
 
 
 async def start_campaign(vapi_campaign_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(f"{VAPI_BASE}/campaign/{vapi_campaign_id}/start", headers=_headers())
-    resp.raise_for_status()
-    return resp.json()
+    return await vapi_post(f"/campaign/{vapi_campaign_id}/start")
 
 
 async def stop_campaign(vapi_campaign_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(f"{VAPI_BASE}/campaign/{vapi_campaign_id}/stop", headers=_headers())
-    resp.raise_for_status()
-    return resp.json()
+    return await vapi_post(f"/campaign/{vapi_campaign_id}/stop")
 
 
-async def get_campaign_stats(vapi_campaign_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(f"{VAPI_BASE}/campaign/{vapi_campaign_id}", headers=_headers())
-    resp.raise_for_status()
-    return resp.json()
+async def get_campaign(vapi_campaign_id: str) -> dict:
+    return await vapi_get(f"/campaign/{vapi_campaign_id}")
+
+
+async def update_campaign(vapi_campaign_id: str, payload: dict) -> dict:
+    return await vapi_patch(f"/campaign/{vapi_campaign_id}", json=payload)
 
 
 async def list_campaigns() -> list[dict]:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(f"{VAPI_BASE}/campaign", headers=_headers())
-    resp.raise_for_status()
-    return resp.json()
+    return await vapi_get("/campaign")
+
+
+async def list_phone_numbers() -> list[dict]:
+    return await vapi_get("/phone-number")

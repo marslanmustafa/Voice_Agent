@@ -7,32 +7,47 @@ from pydantic import BaseModel
 
 # ── Campaigns ──────────────────────────────────────────────────────────────────
 
-class CampaignCreate(BaseModel):
-    name: str
-    topic: Optional[str] = None
-    contact_ids: Optional[List[str]] = None
+class AssistantOverrides(BaseModel):
+    # This can be arbitrarily complex according to Vapi, we use dict for flexibility
+    pass
 
-
-class CampaignUpdate(BaseModel):
+class CreateCustomerDTO(BaseModel):
+    number: Optional[str] = None
+    sipUri: Optional[str] = None
+    extension: Optional[str] = None
     name: Optional[str] = None
-    topic: Optional[str] = None
+    email: Optional[str] = None
+    externalId: Optional[str] = None
+    numberE164CheckEnabled: Optional[bool] = None
+    assistantOverrides: Optional[dict] = None
 
+class CreateCampaignDTO(BaseModel):
+    name: str
+    assistantId: Optional[str] = None
+    workflowId: Optional[str] = None
+    squadId: Optional[str] = None
+    phoneNumberId: str  # Required per Vapi documentation
+    dialPlan: Optional[List[dict]] = None
+    schedulePlan: Optional[dict] = None
+    customers: Optional[List[CreateCustomerDTO]] = None
 
 class CampaignResponse(BaseModel):
     id: str
     name: str
-    topic: Optional[str]
-    vapi_campaign_id: Optional[str] = None
     status: str = "draft"
     created_at: str
-    contact_count: int = 0
-    call_count: int = 0
-    completed_count: int = 0
-
 
 class CampaignListResponse(BaseModel):
     campaigns: List[CampaignResponse]
     total: int
+
+class UpdateCampaignDTO(BaseModel):
+    name: Optional[str] = None
+    assistantId: Optional[str] = None
+    phoneNumberId: Optional[str] = None
+    workflowId: Optional[str] = None
+    squadId: Optional[str] = None
+    status: Optional[str] = None  # Vapi may support status updates
 
 
 # ── Calls ──────────────────────────────────────────────────────────────────────

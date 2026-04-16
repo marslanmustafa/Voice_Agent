@@ -28,7 +28,9 @@ class ConnectionManager:
             self._connections.pop(call_id, None)
 
     async def broadcast(self, call_id: str, data: dict) -> None:
+        """Broadcast to specific call_id and global 'monitor' channel."""
         dead: List[WebSocket] = []
+        # Target listeners for this specific call
         for ws in self._connections.get(call_id, []):
             try:
                 await ws.send_json(data)
@@ -36,6 +38,19 @@ class ConnectionManager:
                 dead.append(ws)
         for ws in dead:
             self.disconnect(call_id, ws)
+            
+        # Target global monitor listeners
+        dead_monitor: List[WebSocket] = []
+        for ws in self._connections.get("monitor", []):
+            try:
+                # Include callId in payload so monitor clients can multiplex
+                payload = data.copy()
+                payload["callId"] = call_id
+                await ws.send_json(payload)
+            except Exception:
+                dead_monitor.append(ws)
+        for ws in dead_monitor:
+            self.disconnect("monitor", ws)
 
 
 ws_manager = ConnectionManager()
