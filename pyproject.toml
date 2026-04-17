@@ -24,4 +24,5 @@ dependencies = [
     "phonenumbers>=8.13.52",
     "greenlet>=3.4.0",
     "argon2-cffi>=25.1.0",
+    "websockets>=16.0",
 ]

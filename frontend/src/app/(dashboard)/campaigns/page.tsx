@@ -6,14 +6,14 @@ import { FiPlus, FiRadio, FiClock, FiArrowRight } from "react-icons/fi";
 import { useGetCampaignsQuery } from "@/store/api/allApis";
 
 const STATUS_META: Record<string, { color: string; label: string }> = {
-  draft:     { color: "var(--color-text3)",  label: "Draft"     },
-  created:   { color: "var(--color-amber)",  label: "Created"   },
-  queued:    { color: "var(--color-amber)",  label: "Queued"    },
-  running:   { color: "var(--color-green)",  label: "Running"   },
-  completed: { color: "var(--color-cyan)",   label: "Completed" },
-  done:      { color: "var(--color-cyan)",   label: "Completed" },
-  cancelled: { color: "var(--color-red)",    label: "Cancelled" },
-  unknown:   { color: "var(--color-text2)",  label: "Unknown"   },
+  draft: { color: "var(--color-text3)", label: "Draft" },
+  created: { color: "var(--color-amber)", label: "Created" },
+  queued: { color: "var(--color-amber)", label: "Queued" },
+  running: { color: "var(--color-green)", label: "Running" },
+  completed: { color: "var(--color-cyan)", label: "Completed" },
+  done: { color: "var(--color-cyan)", label: "Completed" },
+  cancelled: { color: "var(--color-red)", label: "Cancelled" },
+  unknown: { color: "var(--color-text2)", label: "Unknown" },
 };
 
 export default function CampaignsPage() {

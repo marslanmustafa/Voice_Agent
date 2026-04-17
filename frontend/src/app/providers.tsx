@@ -5,6 +5,7 @@ import { Provider } from "react-redux";
 import { SessionProvider, useSession } from "next-auth/react";
 import { store } from "@/store";
 import { setCredentials, setLoading } from "@/store/slices/authSlice";
+import { FloatingDialer } from "@/components/FloatingDialer";
 
 function TokenSync() {
   const { data: session, status } = useSession();
@@ -27,6 +28,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <SessionProvider>
       <Provider store={store}>
         <TokenSync />
+        <FloatingDialer />
         {children}
       </Provider>
     </SessionProvider>

@@ -25,11 +25,19 @@ async def create_outbound_call(
     first_message: str | None = None,
     system_prompt: str | None = None,
 ) -> dict:
+    """
+    Create an outbound call via Vapi.
+
+    NOTE: recordingEnabled, artifactPlan, monitorPlan are NOT valid at the
+    top-level /call payload — they belong inside assistantOverrides or the
+    assistant definition itself. Putting them top-level causes a 400.
+    """
     payload: dict = {
         "assistantId": assistant_id,
         "customer": {"number": customer_number},
     }
 
+    # Phone number routing
     if phone_number_id:
         payload["phoneNumberId"] = phone_number_id
     elif settings.TWILIO_PHONE_NUMBER and settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN:
@@ -39,7 +47,13 @@ async def create_outbound_call(
             "twilioAuthToken": settings.TWILIO_AUTH_TOKEN,
         }
 
-    overrides = {}
+    # Build assistantOverrides — ONLY behavioral config lives here
+    overrides: dict = {}
+
+    # Recording + monitoring belong in assistantOverrides, not top-level
+    overrides["artifactPlan"] = {"recordingEnabled": True, "videoRecordingEnabled": False}
+    overrides["monitorPlan"] = {"listenEnabled": True, "controlEnabled": True}
+
     if first_message:
         overrides["firstMessage"] = first_message
 
@@ -47,21 +61,26 @@ async def create_outbound_call(
         try:
             assistant_data = await get_assistant(assistant_id)
             assistant_model = assistant_data.get("model", {})
-            assistant_model["messages"] = [{"role": "system", "content": system_prompt}]
+            # Replace system message only, preserve rest of model config
+            existing_messages = assistant_model.get("messages", [])
+            non_system = [m for m in existing_messages if m.get("role") != "system"]
+            assistant_model["messages"] = [
+                {"role": "system", "content": system_prompt},
+                *non_system,
+            ]
             overrides["model"] = assistant_model
         except Exception as e:
             logger.warning(f"[VAPI] Failed to fetch assistant for override: {e}")
-            overrides["model"] = {"provider": "openai", "model": "gpt-4o", "messages": [{"role": "system", "content": system_prompt}]}
-
-    overrides["recordingEnabled"] = True
-    overrides["artifactPlan"] = {"recordingEnabled": True}
-    overrides["monitorPlan"] = {"listenEnabled": True, "controlEnabled": True}
+            overrides["model"] = {
+                "provider": "openai",
+                "model": "gpt-4o",
+                "messages": [{"role": "system", "content": system_prompt}],
+            }
 
     payload["assistantOverrides"] = overrides
 
-    # Try primary route, fall back to older routes on 404
     resp = await vapi_post("/call", json=payload)
-    print("resp", resp)
+    logger.info(f"[VAPI] Call created: {resp.get('id')} → status={resp.get('status')}")
     return resp
 
 
@@ -84,7 +103,13 @@ async def list_calls(assistant_id: str, limit: int = 50) -> list[dict]:
 
 async def get_call_transcript(vapi_call_id: str) -> list[dict]:
     try:
-        return await vapi_get(f"/call/{vapi_call_id}/transcripts")
+        call_data = await get_call(vapi_call_id)
+        # Vapi embeds transcript inside the call object as `artifact.transcript`
+        artifact = call_data.get("artifact", {})
+        if artifact and artifact.get("transcript"):
+            return artifact["transcript"]
+        # Fallback: top-level messages array
+        return call_data.get("messages", [])
     except Exception:
         return []
 

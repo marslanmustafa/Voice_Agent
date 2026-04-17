@@ -15,6 +15,7 @@ from app.routers import (
     auth_router, calls_router, campaigns_router,
     contacts_router, users_router, webhook_router,
 )
+from app.routers.webhooks import router as webhooks_router
 from app.services.ws_manager import router as ws_router
 
 
@@ -47,6 +48,7 @@ app.add_middleware(
         settings.FRONTEND_URL,
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://q641qxfx-3000.inc1.devtunnels.ms"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -59,6 +61,7 @@ app.include_router(contacts_router)
 app.include_router(campaigns_router)
 app.include_router(calls_router)
 app.include_router(webhook_router)
+app.include_router(webhooks_router)
 app.include_router(ws_router)
 
 

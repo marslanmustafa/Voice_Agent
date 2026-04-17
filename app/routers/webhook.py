@@ -1,95 +1,57 @@
 """
-VoiceAgent — Vapi Webhook Router
-POST /vapi/webhook  — receive Vapi call lifecycle events
-GET  /vapi/webhook  — Vapi URL verification ping
+VoiceAgent — Vapi Webhook Receiver
+POST /webhooks/vapi
+
+Vapi calls this endpoint for server-side events (status changes, transcripts,
+end-of-call reports). This is the fallback path when the WS bridge isn't
+running or misses events.
+
+Register this URL in your Vapi dashboard:
+  Dashboard → Settings → Webhooks → Server URL
+  → https://yourdomain.com/webhooks/vapi
 """
 
-from datetime import datetime, timezone
+import logging
 
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Request, Response
 
-from app.db.database import get_db
 from app.services.ws_manager import ws_manager
+from app.utils.vapi_ws_bridge import normalize_vapi_event
 
-router = APIRouter(prefix="/vapi", tags=["vapi"])
-
-# Vapi endedReason values that map to our statuses
-_ENDED_STATUS_MAP = {
-    "customer-ended-call": "completed",
-    "assistant-ended-call": "completed",
-    "voicemail": "voicemail",
-    "machine-detected": "voicemail",
-    "silence-timed-out": "failed",
-    "max-duration-exceeded": "completed",
-    "customer-busy": "failed",
-    "no-answer": "failed",
-    "failed": "failed",
-}
+router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+logger = logging.getLogger(__name__)
 
 
-@router.get("/webhook")
-async def vapi_webhook_ping():
-    """Vapi sends GET to verify webhook URL is reachable."""
-    return {"status": "ok"}
-
-
-@router.post("/webhook")
-async def vapi_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+@router.post("/vapi")
+async def vapi_webhook(request: Request):
     """
-    Handle Vapi call events:
-    - call-started       → record started_at, broadcast to WebSocket
-    - transcript         → broadcast to WebSocket (NO DB SAVE)
-    - call-ended         → record ended_at, broadcast to WebSocket
-    - end-of-call-report → broadcast to WebSocket
-    - call-failed        → record ended_at, broadcast to WebSocket
+    Receive Vapi server events and push them into ws_manager.
+
+    Vapi REQUIRES a 200 response quickly — heavy work must be fire-and-forget.
     """
     try:
         payload = await request.json()
     except Exception:
-        return {"status": "bad_request"}
+        return Response(status_code=400)
 
-    message = payload.get("message", {})
-    event: str = message.get("type", "")
-    vapi_call_id: str | None = message.get("call", {}).get("id")
+    msg_type = payload.get("type", "")
+    call_id = (
+        payload.get("call", {}).get("id")
+        or payload.get("callId")
+        or payload.get("id")
+    )
 
-    if not event or not vapi_call_id:
-        return {"status": "ignored"}
+    logger.info(f"[Webhook] Vapi event: type={msg_type} call={call_id}")
 
-    if event == "call-started":
-        await ws_manager.broadcast(vapi_call_id, {"type": "call-started", "status": "active"})
+    if not call_id:
+        logger.warning("[Webhook] No call ID in Vapi event — skipping broadcast")
+        return Response(status_code=200)
 
-    elif event == "transcript":
-        role = message.get("role", "unknown")
-        text = message.get("transcript", "")
-        timestamp = message.get("timestamp", 0.0)
-        if text:
-            # Broadcast live to UI, do not save to DB
-            await ws_manager.broadcast(vapi_call_id, {
-                "type": "transcript", "speaker": role, "text": text, "timestamp": timestamp,
-            })
+    # Normalize and broadcast (fire-and-forget, don't await long work)
+    normalized = normalize_vapi_event(payload)
+    if normalized:
+        import asyncio
+        asyncio.create_task(ws_manager.broadcast(call_id, normalized))
 
-    elif event == "call-ended":
-        ended_reason = message.get("endedReason", "completed")
-        mapped_status = _ENDED_STATUS_MAP.get(ended_reason, "completed")
-        
-        await ws_manager.broadcast(vapi_call_id, {
-            "type": "call-ended",
-            "status": mapped_status,
-            "duration_secs": message.get("durationSeconds"),
-        })
-
-    elif event == "end-of-call-report":
-        await ws_manager.broadcast(vapi_call_id, {
-            "type": "call-ended",
-            "status": "completed"
-        })
-
-    elif event == "call-failed":
-        await ws_manager.broadcast(vapi_call_id, {"type": "call-failed", "status": "failed"})
-
-    elif event == "voicemail":
-        await ws_manager.broadcast(vapi_call_id, {"type": "call-ended", "status": "voicemail"})
-
-    return {"status": "ok"}
+    # Vapi needs a fast 200 ack — return immediately
+    return Response(status_code=200)

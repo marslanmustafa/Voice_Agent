@@ -3,7 +3,9 @@ VoiceAgent — WebSocket Manager
 Manages per-call WebSocket connections for live transcript streaming.
 """
 
-from typing import Dict, List
+import asyncio
+import json
+from typing import Any, Callable, Dict, List
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -13,6 +15,7 @@ router = APIRouter(tags=["websocket"])
 class ConnectionManager:
     def __init__(self):
         self._connections: Dict[str, List[WebSocket]] = {}
+        self._subscriptions: Dict[str, List[Callable[[dict], None]]] = {}
 
     async def connect(self, call_id: str, ws: WebSocket) -> None:
         await ws.accept()
@@ -28,9 +31,9 @@ class ConnectionManager:
             self._connections.pop(call_id, None)
 
     async def broadcast(self, call_id: str, data: dict) -> None:
-        """Broadcast to specific call_id and global 'monitor' channel."""
+        """Broadcast to WebSocket clients and call subscriptions."""
+        # Deliver to WebSocket clients
         dead: List[WebSocket] = []
-        # Target listeners for this specific call
         for ws in self._connections.get(call_id, []):
             try:
                 await ws.send_json(data)
@@ -38,12 +41,21 @@ class ConnectionManager:
                 dead.append(ws)
         for ws in dead:
             self.disconnect(call_id, ws)
-            
-        # Target global monitor listeners
+
+        # Deliver to async callbacks (SSE, etc.)
+        for cb in self._subscriptions.get(call_id, []):
+            try:
+                if asyncio.iscoroutinefunction(cb):
+                    await cb(data)
+                else:
+                    cb(data)
+            except Exception:
+                pass
+
+        # Global monitor channel
         dead_monitor: List[WebSocket] = []
         for ws in self._connections.get("monitor", []):
             try:
-                # Include callId in payload so monitor clients can multiplex
                 payload = data.copy()
                 payload["callId"] = call_id
                 await ws.send_json(payload)
@@ -51,6 +63,20 @@ class ConnectionManager:
                 dead_monitor.append(ws)
         for ws in dead_monitor:
             self.disconnect("monitor", ws)
+
+    async def subscribe(self, call_id: str, callback: Callable[[dict], Any]) -> None:
+        """Register a callback to receive all broadcast events for a call."""
+        self._subscriptions.setdefault(call_id, []).append(callback)
+
+    def unsubscribe(self, call_id: str, callback: Callable[[dict], Any]) -> None:
+        """Remove a callback subscription."""
+        subs = self._subscriptions.get(call_id, [])
+        try:
+            subs.remove(callback)
+        except ValueError:
+            pass
+        if not subs:
+            self._subscriptions.pop(call_id, None)
 
 
 ws_manager = ConnectionManager()

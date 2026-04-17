@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppDispatch } from "@/store/hooks";
-import { appendTranscript } from "@/store/slices/callsSlice";
+import { appendTranscriptSegment } from "@/store/slices/callsSlice";
+export { useLiveAudio } from "./useLiveAudio";
+export { useCallStream } from "./useCallStream";
 
 export function useLiveTranscript(callId: string | null, controlUrl?: string | null) {
   const dispatch = useAppDispatch();
@@ -9,8 +11,7 @@ export function useLiveTranscript(callId: string | null, controlUrl?: string | n
   useEffect(() => {
     if (!callId) return;
 
-    // Prefer Vapi's controlUrl if provided (enables real-time transcript events),
-    // otherwise fall back to the local backend WS proxy.
+    // Prefer Vapi's controlUrl if provided, otherwise fall back to local backend WS proxy.
     const url = controlUrl ?? `${process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000"}/ws/${callId}`;
     const ws = new WebSocket(url);
     wsRef.current = ws;
@@ -18,9 +19,9 @@ export function useLiveTranscript(callId: string | null, controlUrl?: string | n
     ws.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
-        // Vapi emits { type: "transcript", role: "user"|"assistant", transcript: "..." }
+        // Vapi emits { type: "transcript", role, transcript }
         if (data.type === "transcript" && data.transcript) {
-          dispatch(appendTranscript({
+          dispatch(appendTranscriptSegment({
             callId,
             segment: {
               speaker: data.role === "user" ? "user" : "agent",
@@ -31,7 +32,7 @@ export function useLiveTranscript(callId: string | null, controlUrl?: string | n
         }
         // Local backend proxy format: { type: "transcript", speaker, text, timestamp }
         if (data.type === "transcript" && data.text && !data.transcript) {
-          dispatch(appendTranscript({
+          dispatch(appendTranscriptSegment({
             callId,
             segment: { speaker: data.speaker, text: data.text, timestamp: data.timestamp ?? 0 },
           }));

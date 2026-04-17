@@ -16,25 +16,57 @@ export default function RegisterPage() {
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
-    setLoading(true); setError("");
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/email/register`, {
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (password.length < 8) {
+    setError("Password must be at least 8 characters");
+    return;
+  }
+
+  setLoading(true);
+  setError("");
+
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/auth/email/register`,
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, name }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.detail || "Registration failed"); setLoading(false); return; }
-      const result = await signIn("credentials", { email, password, redirect: false });
-      if (result?.error) setError("Account created but sign-in failed. Please log in.");
-      else router.push("/onboarding");
-    } catch { setError("Something went wrong. Please try again."); }
-    setLoading(false);
-  };
+      }
+    );
 
+    const data = await res.json();
+
+    if (!res.ok) {
+      setError(data.detail || "Registration failed");
+      setLoading(false);
+      return;
+    }
+
+    // 💾 SAVE TOKEN (your request)
+    if (data?.access_token) {
+      localStorage.setItem("access_token", data.access_token);
+    }
+
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
+
+    if (result?.error) {
+      setError("Account created but sign-in failed. Please log in.");
+    } else {
+      router.push("/onboarding");
+    }
+  } catch {
+    setError("Something went wrong. Please try again.");
+  }
+
+  setLoading(false);
+};
   return (
     <AuthShell>
       <div className="w-full max-w-[400px] rounded-[20px] p-9 border"
