@@ -30,9 +30,8 @@ export function useCallStream(callId: string | null): void {
         esRef.current = null;
       }
 
-      const token = localStorage.getItem("access_token");
-
-      const url = `${API_BASE}/calls/${callId}/stream?token=${token}`;
+      // No token needed — auth-free SSE stream
+      const url = `${API_BASE}/calls/${callId}/stream`;
       const es = new EventSource(url);
       esRef.current = es;
 
@@ -71,6 +70,8 @@ export function useCallStream(callId: string | null): void {
           }
 
           // ── Status changed ────────────────────────────────────────
+          // Both "status" and "status-update" are handled for compatibility
+          case "status":
           case "status-update": {
             const status = payload.status as CallStatus;
             if (status) dispatch(statusUpdated({ status }));
@@ -78,7 +79,8 @@ export function useCallStream(callId: string | null): void {
           }
 
           // ── Call ended (terminal) ─────────────────────────────────
-          case "call-ended": {
+          case "call-ended":
+          case "end-of-call": {
             dispatch(
               callEnded({
                 reason: payload.reason as string | undefined,
@@ -99,7 +101,12 @@ export function useCallStream(callId: string | null): void {
             break;
           }
 
-          // ── Ignore speech-update and other non-critical events ─────
+          // ── Speech update (can be used for talking indicators) ─────
+          case "speech-update":
+            // Ignore for now — talking indicators are optional
+            break;
+
+          // ── Ignore other non-critical events ──────────────────────
           default:
             break;
         }

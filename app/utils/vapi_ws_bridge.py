@@ -96,9 +96,13 @@ async def _bridge_task(call_id: str, listen_url: str) -> None:
     """
     Core bridge loop. Connects to Vapi's listenUrl WS, reads events,
     normalizes them, and pushes to ws_manager.
-    Reconnects up to 3 times on unexpected disconnection.
+
+    NOTE: This is a SUPPLEMENTARY path. The webhook at /vapi/webhook is the
+    primary event delivery mechanism. If the bridge fails to connect
+    (e.g. handshake timeout, auth issue), we log and exit silently —
+    events will still arrive via the webhook.
     """
-    max_retries = 3
+    max_retries = 2
     attempt = 0
 
     while attempt <= max_retries:
@@ -106,6 +110,7 @@ async def _bridge_task(call_id: str, listen_url: str) -> None:
             logger.info(f"[Bridge] Connecting to Vapi WS for call {call_id} (attempt {attempt + 1})")
             async with websockets.connect(
                 listen_url,
+                open_timeout=10,          # fail fast on handshake issues
                 ping_interval=20,
                 ping_timeout=10,
                 close_timeout=5,
@@ -115,10 +120,9 @@ async def _bridge_task(call_id: str, listen_url: str) -> None:
 
                 async for raw_message in ws:
                     try:
-                        # Binary frames are PCM audio chunks from Vapi — not JSON events.
-                        # Skip them silently; they carry no transcript/status data we need.
+                        # Binary frames are PCM audio chunks — not JSON events.
                         if isinstance(raw_message, bytes):
-                            logger.debug(f"[Bridge] Binary audio frame for call {call_id} ({len(raw_message)} bytes) — skipping")
+                            logger.debug(f"[Bridge] Binary audio frame ({len(raw_message)} bytes) — skipping")
                             continue
 
                         data = json.loads(raw_message)
@@ -133,9 +137,9 @@ async def _bridge_task(call_id: str, listen_url: str) -> None:
                                 return
 
                     except json.JSONDecodeError:
-                        logger.warning(f"[Bridge] Unexpected non-JSON text frame for call {call_id}: {raw_message[:120]!r}")
+                        logger.warning(f"[Bridge] Non-JSON text frame: {raw_message[:120]!r}")
                     except Exception as e:
-                        logger.warning(f"[Bridge] Error processing frame for {call_id}: {e}")
+                        logger.warning(f"[Bridge] Error processing frame: {e}")
 
         except ConnectionClosed as e:
             logger.info(f"[Bridge] WS closed for call {call_id}: code={e.code} reason={e.reason}")
@@ -148,19 +152,26 @@ async def _bridge_task(call_id: str, listen_url: str) -> None:
             logger.warning(f"[Bridge] WS error for call {call_id}: {e}")
             attempt += 1
 
+        except asyncio.TimeoutError:
+            # Handshake timeout — Vapi listenUrl may not be accessible.
+            # Webhook will handle events. Exit silently without retrying.
+            logger.warning(
+                f"[Bridge] Handshake timeout for call {call_id}. "
+                "Webhook will handle events — bridge not needed."
+            )
+            return
+
         except Exception as e:
-            logger.error(f"[Bridge] Unexpected error for call {call_id}: {e}")
+            logger.warning(f"[Bridge] Unexpected error for call {call_id}: {e}")
             attempt += 1
 
         if attempt <= max_retries:
-            await asyncio.sleep(2 ** attempt)  # Exponential back-off: 2s, 4s, 8s
+            await asyncio.sleep(2 ** attempt)  # Exponential back-off: 2s, 4s
 
-    # Notify frontend that bridge closed
-    await ws_manager.broadcast(call_id, {
-        "type": "stream-closed",
-        "reason": "bridge_disconnected",
-    })
-    logger.info(f"[Bridge] Bridge task exiting for call {call_id}")
+    # Bridge exhausted retries. Webhook is still active — do NOT send
+    # stream-closed here because it would shut down the SSE connection
+    # before webhook events arrive.
+    logger.info(f"[Bridge] Bridge task exiting for call {call_id} — webhook fallback active")
 
 
 async def start_vapi_bridge(call_id: str, listen_url: str) -> None:

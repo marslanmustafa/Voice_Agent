@@ -5,7 +5,7 @@ Run: uvicorn api:app --reload --port 8000
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
@@ -13,7 +13,7 @@ from app.db.database import check_db_health
 from app.db.models import init_db
 from app.routers import (
     calls_router, campaigns_router,
-    contacts_router, users_router, webhook_router,
+    contacts_router, users_router,
 )
 from app.routers.webhooks import router as webhooks_router
 from app.services.ws_manager import router as ws_router
@@ -59,15 +59,25 @@ app.include_router(users_router)
 app.include_router(contacts_router)
 app.include_router(campaigns_router)
 app.include_router(calls_router)
-app.include_router(webhook_router)
 app.include_router(webhooks_router)
 app.include_router(ws_router)
 
+
+from app.routers.webhooks import vapi_webhook as _vapi_webhook_handler
 
 @app.get("/health")
 async def health():
     db = await check_db_health()
     return {"api": "ok", "version": "2.0.0", "database": db}
+
+
+# ── /vapi/webhook alias ────────────────────────────────────────────────────────
+# Vapi is configured to POST to /vapi/webhook (matching main.py).
+# This alias forwards to the same handler at /webhooks/vapi.
+@app.post("/vapi/webhook")
+async def vapi_webhook_alias(request: Request):
+    return await _vapi_webhook_handler(request)
+
 
 
 if __name__ == "__main__":

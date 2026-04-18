@@ -1,15 +1,26 @@
 """
-Vapi webhook receiver — handles all server-sent events from Vapi.
-Event types we care about:
-  call-status-update  → ringing / in-progress / ended / no-answer / busy / failed
-  transcript          → partial or final transcript segment
-  end-of-call-report  → summary, full transcript, recording URL
+VoiceAgent — Vapi Webhook Receiver
+POST /webhooks/vapi
+
+Vapi calls this endpoint for ALL server-side events.
+This handles the `{ message: { type, ... } }` envelope that Vapi sends.
+
+Supported events:
+  - transcript            → live partial/final transcript segments
+  - end-of-call-report    → full conversation history + summary + recording
+  - call-status-update    → status changes (ringing, in-progress, ended…)
+  - call-started          → call is live
+  - call-ended / call-end → call terminated
+  - speech-update         → talking indicators
+
+Register in Vapi Dashboard → Settings → Webhooks → Server URL:
+  https://yourdomain.com/webhooks/vapi
 """
 
 import json
 import logging
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, Response
 
 from app.services.ws_manager import ws_manager
 
@@ -20,138 +31,158 @@ logger = logging.getLogger(__name__)
 STATUS_MAP = {
     "queued":        "queued",
     "ringing":       "ringing",
-    "in-progress":   "in-progress",
-    "forwarding":    "forwarding",
-    "ended":         "ended",
+    "in-progress":   "active",
+    "forwarding":    "active",
+    "ended":         "completed",
     "no-answer":     "no-answer",
     "busy":          "busy",
     "failed":        "failed",
-    "canceled":      "canceled",
+    "canceled":      "cancelled",
 }
 
 
 def _extract_call_id(body: dict) -> str | None:
-    """Safely extract call ID from various Vapi webhook shapes."""
+    """
+    Extract call ID from Vapi webhook body.
+    Vapi wraps events in: { message: { type, call: { id } } }
+    But also sometimes sends callId at top-level.
+    """
     msg = body.get("message", {})
-    call_id = (
+    return (
         msg.get("call", {}).get("id")
         or body.get("call", {}).get("id")
         or body.get("callId")
         or msg.get("callId")
     )
-    return call_id
 
 
 @router.post("/vapi")
 async def vapi_webhook(request: Request):
     """
-    Receive and broadcast Vapi events to all connected WebSocket clients.
+    Receive Vapi server events and push them into ws_manager for SSE delivery.
+    Vapi requires a fast 200 response — all work is fire-and-forget.
     """
     try:
         body = await request.json()
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+        return Response(status_code=400)
 
-    msg_type = body.get("message", {}).get("type") or body.get("type", "")
+    # Vapi wraps all events inside a "message" object
+    msg = body.get("message", body)   # fall back to body if no envelope
+    msg_type = msg.get("type", "")
     call_id = _extract_call_id(body)
 
+    logger.info(f"[Webhook] type={msg_type!r} call={call_id}")
+
     if not call_id:
-        logger.debug(f"[WEBHOOK] No call_id in event: {msg_type}")
-        return {"received": True}
+        logger.debug(f"[Webhook] No call_id for event type={msg_type!r} — skipping")
+        return Response(status_code=200)
 
-    logger.info(f"[WEBHOOK] {msg_type} | call={call_id}")
-
-    # ── Call status update ──────────────────────────────────────────
-    if msg_type in ("call-status-update", "status-update"):
-        raw = body.get("message", {}).get("status") or body.get("status", "unknown")
-        status = STATUS_MAP.get(raw, raw)
-        await ws_manager.broadcast(call_id, {
-            "type": "status",
-            "status": status,
-            "raw": raw,
-        })
-
-    # ── Call started ────────────────────────────────────────────────
-    elif msg_type == "call-started":
-        await ws_manager.broadcast(call_id, {
-            "type": "status",
-            "status": "in-progress",
-            "raw": "in-progress",
-        })
-
-    # ── Transcript segment (partial or final) ───────────────────────
-    elif msg_type in ("transcript", "transcript-update"):
-        msg = body.get("message", body)
-        role = msg.get("role", "unknown")          # "user" or "assistant"
-        text = (
-            msg.get("transcript", "")
-            or msg.get("transcriptWithFormatting", "")
-            or ""
-        )
-        transcript_type = msg.get("transcriptType", "final")  # "partial" | "final"
+    # ── Live transcript segment (partial or final) ───────────────────────────
+    if msg_type == "transcript":
+        role = msg.get("role", "unknown")                         # "user" | "assistant"
+        transcript_type = msg.get("transcriptType", "final")      # "partial" | "final"
+        text = msg.get("transcript", "") or msg.get("text", "")
         if text:
-            await ws_manager.broadcast(call_id, {
-                "type":        "transcript",
-                "speaker":     role,
-                "text":        text,
-                "transcript_type": transcript_type,
-                "timestamp":   msg.get("timestamp", 0),
-            })
+            import asyncio
+            asyncio.create_task(ws_manager.broadcast(call_id, {
+                "type":       "transcript",
+                "speaker":    "user" if role == "user" else "agent",
+                "text":       text,
+                "is_partial": transcript_type == "partial",
+                "timestamp":  msg.get("timestamp", 0),
+            }))
 
-    # ── Call ended ─────────────────────────────────────────────────
-    elif msg_type in ("call-ended", "call-end"):
-        ended_reason = body.get("message", {}).get("endedReason", "completed")
-        await ws_manager.broadcast(call_id, {
-            "type":           "call-ended",
-            "status":         STATUS_MAP.get(ended_reason, ended_reason),
-            "ended_reason":   ended_reason,
-        })
-
-    # ── End of call report (has full transcript + summary) ───────────
+    # ── End-of-call report ──────────────────────────────────────────────────
+    # This is the canonical final event Vapi sends — it contains the full
+    # artifact.messages list which holds the entire conversation history.
     elif msg_type == "end-of-call-report":
-        msg = body.get("message", body)
+        artifact = msg.get("artifact", {})
+        recording_url = (
+            msg.get("recordingUrl")
+            or artifact.get("recordingUrl")
+        )
         summary = (
             msg.get("summary")
             or msg.get("analysis", {}).get("summary")
-            or None
         )
-        recording_url = (
-            msg.get("recordingUrl")
-            or msg.get("artifact", {}).get("recordingUrl")
-            or None
-        )
-        await ws_manager.broadcast(call_id, {
-            "type":           "end-of-call",
-            "status":         "completed",
-            "summary":        summary,
-            "recording_url":  recording_url,
-            "transcript_text": msg.get("transcript", ""),
-        })
 
-    # ── Call failed ─────────────────────────────────────────────────
-    elif msg_type == "call-failed":
-        reason = body.get("message", {}).get("reason", "failed")
-        await ws_manager.broadcast(call_id, {
-            "type":   "status",
-            "status": STATUS_MAP.get(reason, "failed"),
-            "raw":    reason,
-        })
+        import asyncio
 
-    # ── Voicemail detection ─────────────────────────────────────────
+        # Publish each message in the transcript history individually
+        # so the SSE consumer can display the full conversation
+        messages = artifact.get("messages", [])
+        for m in messages:
+            role = m.get("role", "unknown")
+            text = m.get("message", "") or m.get("text", "")
+            # Skip system messages
+            if role == "system" or not text:
+                continue
+            speaker = "user" if role == "user" else "agent"
+            asyncio.create_task(ws_manager.broadcast(call_id, {
+                "type":       "transcript",
+                "speaker":    speaker,
+                "text":       text,
+                "is_partial": False,
+                "timestamp":  m.get("time", 0),
+            }))
+
+        # Then send the terminal call-ended event
+        asyncio.create_task(ws_manager.broadcast(call_id, {
+            "type":          "call-ended",
+            "status":        "completed",
+            "summary":       summary,
+            "recording_url": recording_url,
+        }))
+
+    # ── Call status update ───────────────────────────────────────────────────
+    elif msg_type in ("call-status-update", "status-update"):
+        raw_status = msg.get("status", "unknown")
+        import asyncio
+        asyncio.create_task(ws_manager.broadcast(call_id, {
+            "type":   "status-update",
+            "status": STATUS_MAP.get(raw_status, raw_status),
+            "raw":    raw_status,
+        }))
+
+    # ── Call started ─────────────────────────────────────────────────────────
+    elif msg_type == "call-started":
+        import asyncio
+        asyncio.create_task(ws_manager.broadcast(call_id, {
+            "type":   "status-update",
+            "status": "active",
+            "raw":    "in-progress",
+        }))
+
+    # ── Call ended (simple terminal signal) ──────────────────────────────────
+    elif msg_type in ("call-ended", "call-end"):
+        ended_reason = msg.get("endedReason", "completed")
+        import asyncio
+        asyncio.create_task(ws_manager.broadcast(call_id, {
+            "type":         "call-ended",
+            "status":       STATUS_MAP.get(ended_reason, ended_reason),
+            "ended_reason": ended_reason,
+        }))
+
+    # ── Voicemail detected ───────────────────────────────────────────────────
     elif msg_type in ("voicemail", "voicemail-detected"):
-        await ws_manager.broadcast(call_id, {
-            "type":   "status",
+        import asyncio
+        asyncio.create_task(ws_manager.broadcast(call_id, {
+            "type":   "status-update",
             "status": "voicemail",
-        })
+        }))
 
-    # ── Queue / ringing ─────────────────────────────────────────────
-    elif msg_type in ("queue", "call-queued"):
-        await ws_manager.broadcast(call_id, {
-            "type":   "status",
-            "status": "queued",
-        })
+    # ── Speech update (talking indicators) ───────────────────────────────────
+    elif msg_type == "speech-update":
+        import asyncio
+        asyncio.create_task(ws_manager.broadcast(call_id, {
+            "type":   "speech-update",
+            "role":   msg.get("role", "unknown"),
+            "status": msg.get("status", "unknown"),  # "started" | "stopped"
+        }))
 
     else:
-        logger.debug(f"[WEBHOOK] Unhandled event type: {msg_type}")
+        logger.debug(f"[Webhook] Unhandled event type: {msg_type!r}")
 
-    return {"received": True}
+    # Vapi requires a fast 200 ack
+    return Response(status_code=200)
