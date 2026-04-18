@@ -19,9 +19,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from dateutil import parser
 
-from app.core.dependencies import get_current_user, get_user_from_token
+from app.core.config import settings
+from app.core.dependencies import SYSTEM_USER_ID, get_current_user
 from app.db.database import get_db
-from app.db.models import User, UserConfig, Contact
+from app.db.models import User, Contact
 from app.schemas.campaigns import (
     CallDetailResponse, CallListResponse, CallResponse, TranscriptSegmentResponse,
 )
@@ -102,15 +103,15 @@ def _normalize_status(vapi_status: str) -> str:
 async def list_calls(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
-    user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    user_config = await db.scalar(select(UserConfig).where(UserConfig.user_id == user.id))
-    if not user_config or not user_config.vapi_assistant_id:
+    assistant_id = settings.VAPI_ASSISTANT_ID
+    if not assistant_id:
         return CallListResponse(calls=[], total=0)
 
     try:
-        raw_calls = await vapi_service.list_calls(user_config.vapi_assistant_id, limit=page_size)
+        raw_calls = await vapi_service.list_calls(assistant_id, limit=page_size)
     except VapiError:
         raw_calls = []
 
@@ -122,7 +123,7 @@ async def list_calls(
     contact_map = {}
     if phones:
         local_contacts = (await db.scalars(
-            select(Contact).where(Contact.user_id == user.id, Contact.phone.in_(phones))
+            select(Contact).where(Contact.user_id == SYSTEM_USER_ID, Contact.phone.in_(phones))
         )).all()
         for contact in local_contacts:
             contact_map[contact.phone] = str(contact.id)
@@ -134,16 +135,15 @@ async def list_calls(
 @router.post("/dial")
 async def dial_call(
     body: DialRequest,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
-    user_config = await db.scalar(select(UserConfig).where(UserConfig.user_id == user.id))
-    if not user_config or not user_config.vapi_assistant_id:
-        raise HTTPException(status_code=400, detail="Vapi Assistant ID not configured")
+    assistant_id = settings.VAPI_ASSISTANT_ID
+    if not assistant_id:
+        raise HTTPException(status_code=400, detail="VAPI_ASSISTANT_ID is not configured in .env")
 
     try:
         resp = await vapi_service.create_outbound_call(
-            assistant_id=user_config.vapi_assistant_id,
+            assistant_id=assistant_id,
             customer_number=body.phone_to,
             first_message=body.first_message,
             system_prompt=body.system_prompt,
@@ -183,39 +183,14 @@ async def dial_call(
 
 
 @router.get("/{call_id}/stream")
-async def stream_call_events(
-    call_id: str,
-    db: AsyncSession = Depends(get_db),
-    # ─────────────────────────────────────────────────────────────────────────
-    # WHY query param instead of header:
-    # The browser's native EventSource API cannot set custom headers.
-    # Sending Authorization: Bearer via a header is impossible with EventSource.
-    # The token must come as a query param: ?token=<jwt>
-    # This endpoint should be served over HTTPS only in production.
-    # ─────────────────────────────────────────────────────────────────────────
-    token: str = Query(..., description="JWT access token (EventSource cannot send headers)"),
-):
+async def stream_call_events(call_id: str):
     """
     SSE stream for live call status and transcript.
+    Auth-free — accessible to anyone who knows the call_id.
 
     Frontend usage:
-      const token = localStorage.getItem("access_token");   // or however you store it
-      const es = new EventSource(`/api/calls/${callId}/stream?token=${token}`);
+      const es = new EventSource(`/calls/${callId}/stream`);
     """
-    # Validate token using the same logic as the normal auth dependency
-    user = await get_user_from_token(token, db)
-    if not user:
-        # Send an error event then close the stream gracefully.
-        # We return 200 + error event (not 401) because EventSource retries
-        # forever on any non-2xx response, which would spam your server.
-        async def auth_error_stream():
-            yield f"data: {json.dumps({'type': 'error', 'message': 'Unauthorized'})}\n\n"
-        return StreamingResponse(
-            auth_error_stream(),
-            media_type="text/event-stream",
-            status_code=200,
-        )
-
     message_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=200)
 
     async def on_message(data: dict) -> None:
@@ -265,7 +240,7 @@ async def stream_call_events(
 @router.get("/{call_id}", response_model=CallDetailResponse)
 async def get_call(
     call_id: str,
-    user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -278,7 +253,7 @@ async def get_call(
     contact_map = {}
     if phone_to:
         contact = await db.scalar(
-            select(Contact).where(Contact.user_id == user.id, Contact.phone == phone_to)
+            select(Contact).where(Contact.user_id == SYSTEM_USER_ID, Contact.phone == phone_to)
         )
         if contact:
             contact_map[phone_to] = str(contact.id)
@@ -303,7 +278,7 @@ async def get_call(
 @router.post("/{call_id}/end")
 async def terminate_call(
     call_id: str,
-    user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ):
     try:
         await vapi_service.end_call(call_id)

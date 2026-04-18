@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { FiUsers, FiRadio, FiPhone, FiActivity, FiArrowRight, FiPlus, FiTarget } from "react-icons/fi";
 import { useGetContactsQuery, useGetCampaignsQuery, useGetCallsQuery } from "@/store/api/allApis";
-import { useSession } from "next-auth/react";
 
 function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number | string; color: string }) {
   return (
@@ -40,7 +39,6 @@ function QuickAction({ href, icon, label, desc, accent }: { href: string; icon: 
 }
 
 export default function DashboardPage() {
-  const { data: session }    = useSession();
   const { data: contacts }   = useGetContactsQuery({});
   const { data: campaigns }  = useGetCampaignsQuery();
   const { data: calls }      = useGetCallsQuery({});
@@ -49,7 +47,7 @@ export default function DashboardPage() {
   const totalCampaigns = campaigns?.campaigns?.length ?? 0;
   const totalCalls     = calls?.total ?? 0;
   const activeCalls    = calls?.calls?.filter((c) => c.status === "active" || c.status === "ringing").length ?? 0;
-  const userName       = (session?.user?.name?.split(" ")[0]) ?? "there";
+  const userName       = "there";
 
   return (
     <div className="flex flex-col gap-8">

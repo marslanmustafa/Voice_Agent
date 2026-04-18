@@ -115,6 +115,12 @@ async def _bridge_task(call_id: str, listen_url: str) -> None:
 
                 async for raw_message in ws:
                     try:
+                        # Binary frames are PCM audio chunks from Vapi — not JSON events.
+                        # Skip them silently; they carry no transcript/status data we need.
+                        if isinstance(raw_message, bytes):
+                            logger.debug(f"[Bridge] Binary audio frame for call {call_id} ({len(raw_message)} bytes) — skipping")
+                            continue
+
                         data = json.loads(raw_message)
                         normalized = normalize_vapi_event(data)
 
@@ -127,7 +133,7 @@ async def _bridge_task(call_id: str, listen_url: str) -> None:
                                 return
 
                     except json.JSONDecodeError:
-                        logger.warning(f"[Bridge] Non-JSON frame for call {call_id}: {raw_message[:100]}")
+                        logger.warning(f"[Bridge] Unexpected non-JSON text frame for call {call_id}: {raw_message[:120]!r}")
                     except Exception as e:
                         logger.warning(f"[Bridge] Error processing frame for {call_id}: {e}")
 

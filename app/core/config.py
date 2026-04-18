@@ -28,6 +28,9 @@ class Settings(BaseSettings):
 
     # ── Vapi ──────────────────────────────────────────────────────────────────
     VAPI_API_KEY: str = ""
+    VAPI_ASSISTANT_ID: str = ""
+    VAPI_MAX_CALL_DURATION: int = 300
+    VAPI_RETRY_COUNT: int = 1
 
     # ── Twilio ────────────────────────────────────────────────────────────────
     TWILIO_PHONE_NUMBER: str = ""

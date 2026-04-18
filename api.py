@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.db.database import check_db_health
 from app.db.models import init_db
 from app.routers import (
-    auth_router, calls_router, campaigns_router,
+    calls_router, campaigns_router,
     contacts_router, users_router, webhook_router,
 )
 from app.routers.webhooks import router as webhooks_router
@@ -55,7 +55,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(contacts_router)
 app.include_router(campaigns_router)

@@ -20,7 +20,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user
+from app.core.dependencies import SYSTEM_USER_ID, get_current_user
 from app.db.database import get_db
 from app.db.models import Contact, User
 from app.schemas.contacts import (
@@ -67,10 +67,10 @@ async def list_contacts(
     page_size: int = Query(50, ge=1, le=500),
     search: Optional[str] = None,
     tag: Optional[str] = None,
-    user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    base_q = select(Contact).where(Contact.user_id == user.id)
+    base_q = select(Contact).where(Contact.user_id == SYSTEM_USER_ID)
     if search:
         base_q = base_q.where(
             Contact.name.ilike(f"%{search}%") | Contact.phone.ilike(f"%{search}%")
@@ -98,17 +98,17 @@ async def list_contacts(
 @router.post("", response_model=ContactResponse, status_code=201)
 async def create_contact(
     body: ContactCreate,
-    user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     phone = normalize_phone(body.phone)
     existing = await db.scalar(
-        select(Contact).where(Contact.user_id == user.id, Contact.phone == phone)
+        select(Contact).where(Contact.user_id == SYSTEM_USER_ID, Contact.phone == phone)
     )
     if existing:
         raise HTTPException(status_code=409, detail="Contact with this phone already exists")
 
-    contact = Contact(user_id=user.id, name=body.name, phone=phone,
+    contact = Contact(user_id=SYSTEM_USER_ID, name=body.name, phone=phone,
                       email=body.email, tag=body.tag, notes=body.notes)
     db.add(contact)
     await db.commit()
@@ -130,7 +130,7 @@ async def download_template(_: User = Depends(get_current_user)):
 @router.post("/csv/upload", response_model=CsvImportResponse)
 async def upload_csv(
     file: UploadFile = File(...),
-    user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     if not (file.filename or "").lower().endswith(".csv"):
@@ -157,14 +157,14 @@ async def upload_csv(
 
             phone = normalize_phone(phone_raw)
             existing = await db.scalar(
-                select(Contact).where(Contact.user_id == user.id, Contact.phone == phone)
+                select(Contact).where(Contact.user_id == SYSTEM_USER_ID, Contact.phone == phone)
             )
             if existing:
                 skipped += 1
                 continue
 
             db.add(Contact(
-                user_id=user.id, name=name, phone=phone,
+                user_id=SYSTEM_USER_ID, name=name, phone=phone,
                 email=(row.get("email") or "").strip() or None,
                 tag=(row.get("tag") or "").strip() or None,
                 notes=(row.get("notes") or "").strip() or None,
@@ -181,11 +181,11 @@ async def upload_csv(
 @router.get("/{contact_id}", response_model=ContactResponse)
 async def get_contact(
     contact_id: str,
-    user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     contact = await db.scalar(
-        select(Contact).where(Contact.id == uuid.UUID(contact_id), Contact.user_id == user.id)
+        select(Contact).where(Contact.id == uuid.UUID(contact_id), Contact.user_id == SYSTEM_USER_ID)
     )
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
@@ -196,11 +196,11 @@ async def get_contact(
 async def update_contact(
     contact_id: str,
     body: ContactUpdate,
-    user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     contact = await db.scalar(
-        select(Contact).where(Contact.id == uuid.UUID(contact_id), Contact.user_id == user.id)
+        select(Contact).where(Contact.id == uuid.UUID(contact_id), Contact.user_id == SYSTEM_USER_ID)
     )
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
@@ -219,11 +219,11 @@ async def update_contact(
 @router.delete("/{contact_id}", status_code=204)
 async def delete_contact(
     contact_id: str,
-    user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     contact = await db.scalar(
-        select(Contact).where(Contact.id == uuid.UUID(contact_id), Contact.user_id == user.id)
+        select(Contact).where(Contact.id == uuid.UUID(contact_id), Contact.user_id == SYSTEM_USER_ID)
     )
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")

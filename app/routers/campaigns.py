@@ -8,12 +8,10 @@ import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.dependencies import get_current_user
-from app.db.database import get_db
-from app.db.models import User, UserConfig
+from app.db.models import User
 from app.schemas.campaigns import (
     CreateCampaignDTO, CreateCustomerDTO, CampaignResponse, CampaignListResponse, UpdateCampaignDTO,
 )
@@ -135,13 +133,12 @@ async def update_campaign(
 async def create_campaign(
     body: CreateCampaignDTO,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     """
     Proxies requests to Vapi's /campaign endpoint.
 
     phoneNumberId is required per Vapi documentation. If not provided,
-    attempts to fetch assistantId from the user's config.
+    attempts to fetch assistantId from env (VAPI_ASSISTANT_ID).
 
     Customers (contacts) can be provided during creation and will be
     added to the campaign immediately after creation.
@@ -152,11 +149,8 @@ async def create_campaign(
     except ValueError:
         raise HTTPException(status_code=400, detail="phoneNumberId must be a valid UUID")
 
-    # If assistantId not provided, fetch from user's config
-    assistant_id = body.assistantId
-    if not assistant_id:
-        config = await db.scalar(select(UserConfig).where(UserConfig.user_id == user.id))
-        assistant_id = config.vapi_assistant_id if config else None
+    # If assistantId not provided, fall back to env var
+    assistant_id = body.assistantId or settings.VAPI_ASSISTANT_ID or None
 
     if not assistant_id:
         raise HTTPException(

@@ -4,7 +4,6 @@ Singleton async client with connection pooling, logging, and error mapping.
 """
 
 import logging
-from typing import Any
 
 import httpx
 
@@ -14,6 +13,14 @@ from app.utils.exceptions import VapiError
 logger = logging.getLogger(__name__)
 
 VAPI_BASE = "https://api.vapi.ai"
+
+# Explicit per-phase timeouts.
+# Vapi's outbound /call endpoint is slow to TCP-connect from some regions.
+# connect=15s  — TCP handshake (was hitting ConnectTimeout before)
+# read=60s     — dial calls can take extra time to respond
+# write=10s    — uploading the request body
+# pool=5s      — waiting for an idle connection from the pool
+_VAPI_TIMEOUT = httpx.Timeout(connect=15.0, read=60.0, write=10.0, pool=5.0)
 
 # Module-level singleton client (lazy-initialized at first use)
 _client: httpx.AsyncClient | None = None
@@ -25,7 +32,7 @@ def _get_client() -> httpx.AsyncClient:
         _client = httpx.AsyncClient(
             base_url=VAPI_BASE,
             headers={"Authorization": f"Bearer {settings.VAPI_API_KEY}"},
-            timeout=30,
+            timeout=_VAPI_TIMEOUT,
         )
     return _client
 
@@ -47,7 +54,26 @@ async def vapi_request(method: str, path: str, **kwargs) -> dict:
         kwargs["json"] = clean_payload(kwargs["json"])
 
     logger.info(f"[VAPI] {method} {path}")
-    resp = await client.request(method, path, **kwargs)
+
+    try:
+        resp = await client.request(method, path, **kwargs)
+    except httpx.TimeoutException as exc:
+        # Map any timeout phase (connect / read / write / pool) to a clean 504.
+        # Without this the exception escapes vapi_request, bypasses VapiError
+        # handlers in callers, and logs as an unexpected 500.
+        phase = type(exc).__name__  # ConnectTimeout | ReadTimeout | WriteTimeout | PoolTimeout
+        logger.error(f"[VAPI] {phase} on {method} {path}")
+        raise VapiError(
+            status_code=504,
+            detail=f"Vapi API request timed out ({phase}). Please try again.",
+        ) from exc
+    except httpx.RequestError as exc:
+        # Network-level errors (DNS, connection refused, etc.)
+        logger.error(f"[VAPI] Network error on {method} {path}: {exc}")
+        raise VapiError(
+            status_code=502,
+            detail=f"Could not reach Vapi API: {exc}",
+        ) from exc
 
     if resp.status_code >= 400:
         logger.error(f"[VAPI] Error {resp.status_code}: {resp.text}")

@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
-import { useSession, signOut } from "next-auth/react";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { FiHome, FiUsers, FiRadio, FiPhone, FiSettings, FiLogOut, FiArrowRight } from "react-icons/fi";
+import { FiHome, FiUsers, FiRadio, FiPhone, FiSettings, FiArrowRight } from "react-icons/fi";
 import { RiRobot2Line } from "react-icons/ri";
 
 const NAV = [
@@ -17,22 +15,7 @@ const NAV = [
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { data: session, status } = useSession();
-  const router   = useRouter();
   const pathname = usePathname();
-
-  useEffect(() => {
-    if (status === "unauthenticated") router.push("/login");
-  }, [status, router]);
-
-  if (status === "loading") return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: "var(--color-bg)", color: "var(--color-text2)", fontSize: 12 }}>
-      <div className="w-8 h-8 rounded-full border-2 border-t-transparent spin" style={{ borderColor: "var(--color-border)", borderTopColor: "var(--color-cyan)" }} />
-      <span>Loading…</span>
-    </div>
-  );
-
-  if (!session) return null;
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--color-bg)" }}>
@@ -55,19 +38,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           style={{ background: "var(--color-cyan)", color: "#000" }}>
           <FiRadio size={11} /> New Campaign <FiArrowRight size={10} />
         </Link>
-
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-[11px]" style={{ color: "var(--color-text2)" }}>
-            {session.user?.email}
-          </span>
-          <button onClick={() => signOut({ callbackUrl: "/login" })}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] border text-[11px] transition-all"
-            style={{ border: "1px solid var(--color-border)", background: "none", color: "var(--color-text2)" }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--color-red)"; e.currentTarget.style.color = "var(--color-red)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; e.currentTarget.style.color = "var(--color-text2)"; }}>
-            <FiLogOut size={11} /> Sign Out
-          </button>
-        </div>
       </header>
 
       <div className="flex flex-1 min-h-0">

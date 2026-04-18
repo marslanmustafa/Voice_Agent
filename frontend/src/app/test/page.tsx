@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import Vapi from "@vapi-ai/web";
 import { FiMic, FiMicOff, FiPhoneOff, FiActivity, FiLoader, FiAlertCircle, FiVolume2, FiVolumeX, FiUser, FiZap, FiRefreshCw, FiMessageSquare, FiSettings } from "react-icons/fi";
 import { RiRobot2Line } from "react-icons/ri";
@@ -18,8 +16,6 @@ const ASSISTANT_ID  = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID  ?? "";
 const VAPI_PUB_KEY  = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY    ?? "";
 
 export default function TestPage() {
-  const router = useRouter();
-  const { data: session, status: authStatus } = useSession();
   const vapiRef     = useRef<Vapi | null>(null);
   const scrollRef   = useRef<HTMLDivElement | null>(null);
 
@@ -29,7 +25,6 @@ export default function TestPage() {
   const [lines,  setLines]  = useState<LiveLine[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
 
-  useEffect(() => { if (authStatus === "unauthenticated") router.push("/login"); }, [authStatus, router]);
 
   // Auto-scroll
   useEffect(() => {
@@ -80,11 +75,6 @@ export default function TestPage() {
     vapiRef.current?.stop();
   }, [pushEvent]);
 
-  if (authStatus === "loading" || !session) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--color-bg)", color: "var(--color-text2)", fontSize: 12 }}>
-      <div className="w-8 h-8 rounded-full border-2 border-t-transparent spin mr-3" style={{ borderColor: "var(--color-border)", borderTopColor: "var(--color-cyan)" }}/> Loading…
-    </div>
-  );
 
   const isLive = callStatus === "active" || callStatus === "connecting" || isEnding;
   const statusLabel = isEnding ? "DISCONNECTING" : callStatus === "connecting" ? "CONNECTING" : callStatus === "active" && isSpeaking ? "AGENT SPEAKING" : callStatus === "active" ? "LISTENING" : callStatus === "ended" ? "SESSION ENDED" : "READY TO TEST";

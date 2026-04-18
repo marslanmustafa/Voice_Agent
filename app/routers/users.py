@@ -1,73 +1,41 @@
 """
-VoiceAgent — Users Router
-GET  /users/me
-GET  /users/config
-PUT  /users/config
+VoiceAgent — Users Router (Auth-Free, Env-driven config)
+GET /users/config  — returns configuration from environment variables
+PUT /users/config  — no-op kept for frontend compatibility
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from typing import Optional
 
+from app.core.config import settings
 from app.core.dependencies import get_current_user
-from app.db.database import get_db
-from app.db.models import User, UserConfig
-from app.schemas.users import UserConfigResponse, UserConfigUpdate, UserMeResponse
+from app.db.models import User
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-def _config_to_response(config: UserConfig) -> UserConfigResponse:
-    return UserConfigResponse(
-        id=str(config.id),
-        max_call_duration=config.max_call_duration,
-        retry_count=config.retry_count,
-        vapi_assistant_id=config.vapi_assistant_id,
-        updated_at=config.updated_at.isoformat() if config.updated_at else None,
+class ConfigResponse(BaseModel):
+    vapi_assistant_id: Optional[str] = None
+    max_call_duration: int = 300
+    retry_count: int = 1
+
+
+@router.get("/config", response_model=ConfigResponse)
+async def get_config(_: User = Depends(get_current_user)):
+    """Return system-wide configuration from env vars."""
+    return ConfigResponse(
+        vapi_assistant_id=settings.VAPI_ASSISTANT_ID or None,
+        max_call_duration=settings.VAPI_MAX_CALL_DURATION,
+        retry_count=settings.VAPI_RETRY_COUNT,
     )
 
 
-@router.get("/me", response_model=UserMeResponse)
-async def get_me(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    config = await db.scalar(select(UserConfig).where(UserConfig.user_id == user.id))
-    return UserMeResponse(
-        id=str(user.id),
-        email=user.email,
-        name=user.name,
-        provider=user.provider,
-        avatar_url=user.avatar_url,
-        is_onboarded=config is not None and config.vapi_assistant_id is not None,
+@router.put("/config", response_model=ConfigResponse)
+async def update_config(_: User = Depends(get_current_user)):
+    """No-op — config is now managed via environment variables."""
+    return ConfigResponse(
+        vapi_assistant_id=settings.VAPI_ASSISTANT_ID or None,
+        max_call_duration=settings.VAPI_MAX_CALL_DURATION,
+        retry_count=settings.VAPI_RETRY_COUNT,
     )
-
-
-@router.get("/config", response_model=UserConfigResponse)
-async def get_config(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    config = await db.scalar(select(UserConfig).where(UserConfig.user_id == user.id))
-    if not config:
-        raise HTTPException(status_code=404, detail="Config not found")
-    return _config_to_response(config)
-
-
-@router.put("/config", response_model=UserConfigResponse)
-async def update_config(
-    body: UserConfigUpdate,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    config = await db.scalar(select(UserConfig).where(UserConfig.user_id == user.id))
-    if not config:
-        config = UserConfig(user_id=user.id)
-        db.add(config)
-
-    for key, value in body.model_dump(exclude_unset=True).items():
-        setattr(config, key, value)
-
-    await db.commit()
-    await db.refresh(config)
-    return _config_to_response(config)
