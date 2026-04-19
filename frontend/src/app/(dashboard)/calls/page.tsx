@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FiPhone, FiMic, FiClock, FiPlay, FiChevronRight, FiRadio } from "react-icons/fi";
 import { useGetCallsQuery, useGetCallQuery } from "@/store/api/allApis";
 import { useLiveTranscript } from "@/hooks";
@@ -16,6 +16,7 @@ export default function CallsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [selectedId, setSelectedId]     = useState<string | null>(null);
   const { data, isLoading } = useGetCallsQuery({ status: statusFilter || undefined });
+  
   useLiveTranscript(selectedId);
 
   return (

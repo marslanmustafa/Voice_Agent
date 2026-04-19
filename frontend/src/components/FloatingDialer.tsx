@@ -171,8 +171,6 @@ function ActiveCallPanel({
   onHold,
   onEnd,
   onMinimize,
-  summary,
-  recordingUrl,
 }: {
   callId: string;
   phone: string;
@@ -186,8 +184,6 @@ function ActiveCallPanel({
   onHold: () => void;
   onEnd: () => void;
   onMinimize: () => void;
-  summary?: string | null;
-  recordingUrl?: string | null;
 }) {
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const meta = STATUS_META[status] ?? STATUS_META.idle;
@@ -244,22 +240,6 @@ function ActiveCallPanel({
       {error && (
         <div className="px-4 py-2 text-[11px]" style={{ background: "rgba(255,80,80,0.08)", color: "var(--color-red)" }}>
           {error}
-        </div>
-      )}
-
-      {/* Recording Player / Link */}
-      {recordingUrl && (
-        <div className="px-4 py-3 border-b" style={{ borderColor: "var(--color-border)", background: "var(--color-bg2)" }}>
-          <div className="text-[10px] uppercase font-bold mb-2" style={{ color: "var(--color-text3)" }}>Recording</div>
-          <audio src={recordingUrl} controls className="w-full h-8 opacity-80" />
-        </div>
-      )}
-
-      {/* Summary */}
-      {summary && (
-        <div className="px-4 py-3 border-b" style={{ borderColor: "var(--color-border)", background: "rgba(0,212,255,0.02)" }}>
-          <div className="text-[10px] uppercase font-bold mb-1.5" style={{ color: "var(--color-cyan)" }}>Summary</div>
-          <p className="text-xs leading-relaxed" style={{ color: "var(--color-text)" }}>{summary}</p>
         </div>
       )}
 
@@ -389,15 +369,13 @@ export function FloatingDialer() {
   const [dialCall] = useDialCallMutation();
   const [endCall] = useEndCallMutation();
 
-  // Drive all call state from the SSE stream
-  // Only connect if the call is NOT a historical review (i.e. not "ended")
-  const shouldConnect = call.status !== "idle" && !isTerminal;
-  useCallStream(shouldConnect ? call.callId : null);
-
-  const elapsed = useCallTimer(call.startedAt, call.status);
-
   const isActive = call.status !== "idle";
   const isTerminal = ["ended", "failed", "no-answer", "busy", "cancelled"].includes(call.status);
+
+  // Drive all call state from the SSE stream
+  useCallStream(isActive ? call.callId : null);
+
+  const elapsed = useCallTimer(call.startedAt, call.status);
 
   const handleDial = useCallback(
     async (phone: string, firstMessage?: string) => {
@@ -480,8 +458,6 @@ export function FloatingDialer() {
               onHold={handleHold}
               onEnd={handleEnd}
               onMinimize={() => setMinimized(true)}
-              summary={call.summary}
-              recordingUrl={call.recordingUrl}
             />
           </div>
         )}

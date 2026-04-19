@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { FiPhone, FiMic, FiClock, FiPlay, FiChevronRight, FiRadio } from "react-icons/fi";
 import { useGetCallsQuery, useGetCallQuery } from "@/store/api/allApis";
 import { useAppSelector, useAppDispatch } from "@/store/hooks";
@@ -24,6 +24,7 @@ const STATUS_COLOR: Record<string, string> = {
 // ─── Main page ──────────────────────────────────────────────────────────────
 
 export default function CallsPage() {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const { data, isLoading, refetch } = useGetCallsQuery({});
   const activeCall = useAppSelector((s) => s.activeCall);
 
@@ -68,12 +69,14 @@ export default function CallsPage() {
                 activeCall.callId === c.id && activeCall.status === "active";
 
               return (
-                <div
+                <button
                   key={c.id}
+                  onClick={() => setSelectedId(c.id)}
                   className="flex items-center gap-3 px-3.5 py-3 rounded-[10px] border w-full text-left transition-all"
                   style={{
                     background: isLive ? "var(--color-cyan-dim)" : "var(--color-bg2)",
                     borderColor: isLive ? "rgba(0,212,255,0.25)" : "var(--color-border)",
+                    cursor: "pointer",
                   }}
                 >
                   <div
@@ -115,7 +118,7 @@ export default function CallsPage() {
                     />
                   )}
                   <FiChevronRight size={12} style={{ color: "var(--color-text3)", flexShrink: 0 }} />
-                </div>
+                </button>
               );
             })
           )}
