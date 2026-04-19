@@ -77,6 +77,8 @@ def _parse_vapi_call(v: dict, contact_map: dict) -> CallResponse:
         duration_secs=duration_secs,
         recording_url=v.get("recordingUrl") or v.get("artifact", {}).get("recordingUrl"),
         summary=v.get("summary") or v.get("analysis", {}).get("summary"),
+        cost=v.get("cost") or v.get("analysis", {}).get("cost") or 0.0,
+        ended_reason=v.get("endedReason"),
         created_at=v.get("createdAt", ""),
     )
 
@@ -245,7 +247,10 @@ async def get_call(
 ):
     try:
         vapi_data = await vapi_service.get_call(call_id)
-        transcript_items = await vapi_service.get_call_transcript(call_id)
+        # Prefer artifact.messages which is more structured
+        messages = vapi_data.get("artifact", {}).get("messages", [])
+        if not messages:
+            messages = await vapi_service.get_call_transcript(call_id)
     except VapiError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
@@ -259,17 +264,28 @@ async def get_call(
             contact_map[phone_to] = str(contact.id)
 
     transcript_segments = []
-    for item in transcript_items:
+    for item in messages:
         if isinstance(item, dict):
             role = item.get("role", "unknown")
+            # Only include user/assistant/bot roles in the transcript view
+            if role in ("system", "tool"): continue
+            
             speaker = "user" if role == "user" else "agent"
-            text = item.get("transcript", "") or item.get("message", "") or item.get("text", "")
-            if text:
-                transcript_segments.append(TranscriptSegmentResponse(
-                    speaker=speaker,
-                    text=text,
-                    timestamp=item.get("time") or item.get("timestamp"),
-                ))
+            text = (
+                item.get("transcript") 
+                or item.get("message") 
+                or item.get("text")
+            )
+            # Skip system instructions that sometimes leak into transcript blocks
+            if not text or text.startswith("#"): continue
+            
+            transcript_segments.append(TranscriptSegmentResponse(
+                speaker=speaker,
+                role=role,
+                text=text.strip(),
+                timestamp=item.get("time") or item.get("timestamp"),
+                time=item.get("time") or item.get("timestamp"),
+            ))
 
     response_dict = _parse_vapi_call(vapi_data, contact_map).model_dump()
     return CallDetailResponse(**response_dict, transcript=transcript_segments)

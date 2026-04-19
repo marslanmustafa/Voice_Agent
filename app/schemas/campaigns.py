@@ -65,13 +65,17 @@ class CallResponse(BaseModel):
     duration_secs: Optional[int] = None
     recording_url: Optional[str] = None
     summary: Optional[str] = None
+    cost: Optional[float] = 0.0
+    ended_reason: Optional[str] = None
     created_at: str
 
 
 class TranscriptSegmentResponse(BaseModel):
     speaker: str
+    role: str
     text: str
     timestamp: Optional[float]
+    time: Optional[int] = None
 
 
 class CallDetailResponse(CallResponse):

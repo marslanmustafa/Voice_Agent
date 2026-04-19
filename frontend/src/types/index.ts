@@ -50,11 +50,19 @@ export interface Call {
   duration_secs?: number;
   recording_url?: string;
   summary?: string;
+  cost?: number;
+  ended_reason?: string;
   created_at: string;
 }
 
 export interface CallDetail extends Call {
-  transcript: { speaker: string; text: string; timestamp?: number }[];
+  transcript: {
+    speaker: string;
+    role: string;
+    text: string;
+    timestamp?: number;
+    time?: number;
+  }[];
 }
 
 export type CallStatus = "idle" | "connecting" | "active" | "ended";
