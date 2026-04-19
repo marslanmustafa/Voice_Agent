@@ -110,6 +110,32 @@ const activeCallSlice = createSlice({
       if (action.payload.summary) state.summary = action.payload.summary;
     },
 
+    /** Load a historical call into the dialer for review */
+    loadHistoricCall(
+      state,
+      action: PayloadAction<{
+        callId: string;
+        phone: string;
+        status: CallStatus;
+        transcript: TranscriptSegment[];
+        summary?: string | null;
+        recordingUrl?: string | null;
+      }>
+    ) {
+      state.callId = action.payload.callId;
+      state.phone = action.payload.phone;
+      state.status = action.payload.status;
+      state.transcript = action.payload.transcript;
+      state.summary = action.payload.summary || null;
+      state.recordingUrl = action.payload.recordingUrl || null;
+      state.startedAt = null;
+      state.listenUrl = null;
+      state.controlUrl = null;
+      state.isMuted = false;
+      state.isOnHold = false;
+      state.error = null;
+    },
+
     /** Hard reset back to idle (after user dismisses the ended call panel) */
     resetCall() {
       return initialState;
@@ -119,6 +145,8 @@ const activeCallSlice = createSlice({
 
     appendTranscript(state, action: PayloadAction<TranscriptSegment>) {
       const seg = action.payload;
+      console.log("[activeCallSlice] appendTranscript:", seg);
+      console.log("[activeCallSlice] Current state transcript length:", state.transcript.length);
 
       if (seg.isPartial) {
         // Replace the last partial from the same speaker, or append
@@ -145,6 +173,7 @@ const activeCallSlice = createSlice({
           state.transcript.push({ ...seg, isPartial: false });
         }
       }
+      console.log("[activeCallSlice] New state transcript length:", state.transcript.length);
     },
 
     // ── Controls ───────────────────────────────────────────────────────────
@@ -168,6 +197,7 @@ export const {
   callInitiated,
   statusUpdated,
   callEnded,
+  loadHistoricCall,
   resetCall,
   appendTranscript,
   setMuted,

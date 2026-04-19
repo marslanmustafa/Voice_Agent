@@ -47,7 +47,7 @@ def normalize_vapi_event(raw: dict) -> Optional[dict]:
         return {
             "type": "transcript",
             "speaker": "user" if role == "user" else "agent",
-            "text": raw.get("transcript", ""),
+            "text": raw.get("transcript", "") or raw.get("message", "") or raw.get("text", ""),
             "is_partial": transcript_type == "partial",
             "timestamp": raw.get("timestamp"),
         }

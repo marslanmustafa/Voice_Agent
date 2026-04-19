@@ -37,6 +37,15 @@ export function useCallStream(callId: string | null): void {
 
       es.onopen = () => {
         reconnectCount.current = 0; // reset on successful connect
+        console.log("[useCallStream] Connection open, dispatching test message");
+        dispatch(
+          appendTranscript({
+            speaker: "agent",
+            text: "--- TEST STREAM CONNECTION ACTIVE ---",
+            timestamp: Date.now(),
+            isPartial: false,
+          })
+        );
       };
 
       es.onmessage = (event) => {
@@ -48,6 +57,7 @@ export function useCallStream(callId: string | null): void {
         }
 
         const type = payload.type as string;
+        console.log(`[useCallStream] Received: ${type}`, payload);
 
         switch (type) {
           // ── Connection confirmed ───────────────────────────────────

@@ -6,12 +6,12 @@ import { FiHome, FiUsers, FiRadio, FiPhone, FiSettings, FiArrowRight } from "rea
 import { RiRobot2Line } from "react-icons/ri";
 
 const NAV = [
-  { href: "/dashboard", icon: FiHome,     label: "Overview"     },
-  { href: "/contacts",  icon: FiUsers,    label: "Contacts"     },
-  { href: "/campaigns", icon: FiRadio,    label: "Campaigns"    },
-  { href: "/calls",     icon: FiPhone,    label: "Call History" },
-  { href: "/dialer",    icon: FiPhone,    label: "Dialer"       },
-  { href: "/settings",  icon: FiSettings, label: "Settings"     },
+  { href: "/dashboard", icon: FiHome, label: "Overview" },
+  { href: "/contacts", icon: FiUsers, label: "Contacts" },
+  { href: "/campaigns", icon: FiRadio, label: "Campaigns" },
+  { href: "/calls", icon: FiPhone, label: "Call History" },
+  { href: "/dialer", icon: FiPhone, label: "Dialer" },
+  { href: "/settings", icon: FiSettings, label: "Settings" },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -55,8 +55,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   className="flex items-center gap-2.5 px-3 py-2.5 rounded-[8px] text-xs transition-all relative"
                   style={{
                     background: active ? "var(--color-cyan-dim)" : "transparent",
-                    color:      active ? "var(--color-cyan)"    : "var(--color-text2)",
-                    border:     active ? "1px solid rgba(0,212,255,0.15)" : "1px solid transparent",
+                    color: active ? "var(--color-cyan)" : "var(--color-text2)",
+                    border: active ? "1px solid rgba(0,212,255,0.15)" : "1px solid transparent",
                   }}>
                   <Icon size={14} />
                   <span className="flex-1">{label}</span>
@@ -73,7 +73,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </aside>
 
         {/* Main */}
-        <main className="flex-1 overflow-y-auto p-8 min-h-[calc(100vh-57px)]">
+        <main className="flex-1 overflow-y-auto p-8 min-h-[calc(100vh-340px)]">
           {children}
         </main>
       </div>

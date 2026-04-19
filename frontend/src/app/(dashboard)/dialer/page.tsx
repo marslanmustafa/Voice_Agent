@@ -9,16 +9,16 @@ import { fmtDuration } from "@/lib/utils";
 // ─── Status colour map ──────────────────────────────────────────────────────
 
 const STATUS_COLOR: Record<string, string> = {
-  completed:  "var(--color-green)",
-  active:     "var(--color-cyan)",
-  dialing:    "var(--color-amber)",
-  ringing:    "var(--color-amber)",
-  failed:     "var(--color-red)",
-  "no-answer":"var(--color-text2)",
-  busy:       "var(--color-red)",
-  cancelled:  "var(--color-text3)",
-  voicemail:  "var(--color-text2)",
-  queued:     "var(--color-text3)",
+  completed: "var(--color-green)",
+  active: "var(--color-cyan)",
+  dialing: "var(--color-amber)",
+  ringing: "var(--color-amber)",
+  failed: "var(--color-red)",
+  "no-answer": "var(--color-text2)",
+  busy: "var(--color-red)",
+  cancelled: "var(--color-text3)",
+  voicemail: "var(--color-text2)",
+  queued: "var(--color-text3)",
 };
 
 // ─── Main page ──────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ export default function CallsPage() {
   const calls = data?.calls ?? [];
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="h-[calc(100vh-64px)] overflow-hidden flex flex-col gap-5">
       <div className="flex justify-between items-center flex-wrap gap-3">
         <h1
           className="text-[20px] font-bold"
@@ -53,7 +53,7 @@ export default function CallsPage() {
 
       <div className="grid gap-4" style={{ gridTemplateColumns: "320px 1fr" }}>
         {/* ── Call List ─────────────────────────────────────────────────── */}
-        <div className="flex flex-col gap-1">
+        <div className="h-[calc(100vh-132px)] flex flex-col gap-1 overflow-scroll">
           {isLoading ? (
             <div className="text-center p-6 text-xs" style={{ color: "var(--color-text3)" }}>
               Loading…
@@ -212,7 +212,7 @@ function LiveOrStaticDetail({ activeCall }: { activeCall: any }) {
 
   return (
     <div
-      className="flex flex-col items-center justify-center gap-3 rounded-[12px] border p-10"
+      className="flex flex-col items-center justify-center gap-3 rounded-[12px] border p-10 h-full"
       style={{
         background: "var(--color-bg2)",
         borderColor: "var(--color-border)",

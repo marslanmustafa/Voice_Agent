@@ -35,15 +35,15 @@ import { fmtDuration } from "@/lib/utils";
 // ─── Status display config ─────────────────────────────────────────────────
 
 const STATUS_META: Record<CallStatus, { label: string; color: string; pulse: boolean }> = {
-  idle:      { label: "Ready",      color: "var(--color-text3)",  pulse: false },
-  dialing:   { label: "Dialing…",   color: "var(--color-amber)",  pulse: true  },
-  ringing:   { label: "Ringing…",   color: "var(--color-amber)",  pulse: true  },
-  active:    { label: "Live",       color: "var(--color-green)",  pulse: true  },
-  ended:     { label: "Call Ended", color: "var(--color-text2)",  pulse: false },
-  failed:    { label: "Failed",     color: "var(--color-red)",    pulse: false },
-  "no-answer":{ label: "No Answer", color: "var(--color-text2)",  pulse: false },
-  busy:      { label: "Busy",       color: "var(--color-red)",    pulse: false },
-  cancelled: { label: "Cancelled",  color: "var(--color-text3)",  pulse: false },
+  idle: { label: "Ready", color: "var(--color-text3)", pulse: false },
+  dialing: { label: "Dialing…", color: "var(--color-amber)", pulse: true },
+  ringing: { label: "Ringing…", color: "var(--color-amber)", pulse: true },
+  active: { label: "Live", color: "var(--color-green)", pulse: true },
+  ended: { label: "Call Ended", color: "var(--color-text2)", pulse: false },
+  failed: { label: "Failed", color: "var(--color-red)", pulse: false },
+  "no-answer": { label: "No Answer", color: "var(--color-text2)", pulse: false },
+  busy: { label: "Busy", color: "var(--color-red)", pulse: false },
+  cancelled: { label: "Cancelled", color: "var(--color-text3)", pulse: false },
 };
 
 // ─── Call Timer ────────────────────────────────────────────────────────────
@@ -171,6 +171,8 @@ function ActiveCallPanel({
   onHold,
   onEnd,
   onMinimize,
+  summary,
+  recordingUrl,
 }: {
   callId: string;
   phone: string;
@@ -184,6 +186,8 @@ function ActiveCallPanel({
   onHold: () => void;
   onEnd: () => void;
   onMinimize: () => void;
+  summary?: string | null;
+  recordingUrl?: string | null;
 }) {
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const meta = STATUS_META[status] ?? STATUS_META.idle;
@@ -191,7 +195,7 @@ function ActiveCallPanel({
   // Auto-scroll transcript
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [transcript.length]);
+  }, [transcript]);
 
   const isTerminal = ["ended", "failed", "no-answer", "busy", "cancelled"].includes(status);
 
@@ -240,6 +244,22 @@ function ActiveCallPanel({
       {error && (
         <div className="px-4 py-2 text-[11px]" style={{ background: "rgba(255,80,80,0.08)", color: "var(--color-red)" }}>
           {error}
+        </div>
+      )}
+
+      {/* Recording Player / Link */}
+      {recordingUrl && (
+        <div className="px-4 py-3 border-b" style={{ borderColor: "var(--color-border)", background: "var(--color-bg2)" }}>
+          <div className="text-[10px] uppercase font-bold mb-2" style={{ color: "var(--color-text3)" }}>Recording</div>
+          <audio src={recordingUrl} controls className="w-full h-8 opacity-80" />
+        </div>
+      )}
+
+      {/* Summary */}
+      {summary && (
+        <div className="px-4 py-3 border-b" style={{ borderColor: "var(--color-border)", background: "rgba(0,212,255,0.02)" }}>
+          <div className="text-[10px] uppercase font-bold mb-1.5" style={{ color: "var(--color-cyan)" }}>Summary</div>
+          <p className="text-xs leading-relaxed" style={{ color: "var(--color-text)" }}>{summary}</p>
         </div>
       )}
 
@@ -370,7 +390,9 @@ export function FloatingDialer() {
   const [endCall] = useEndCallMutation();
 
   // Drive all call state from the SSE stream
-  useCallStream(call.status !== "idle" ? call.callId : null);
+  // Only connect if the call is NOT a historical review (i.e. not "ended")
+  const shouldConnect = call.status !== "idle" && !isTerminal;
+  useCallStream(shouldConnect ? call.callId : null);
 
   const elapsed = useCallTimer(call.startedAt, call.status);
 
@@ -458,6 +480,8 @@ export function FloatingDialer() {
               onHold={handleHold}
               onEnd={handleEnd}
               onMinimize={() => setMinimized(true)}
+              summary={call.summary}
+              recordingUrl={call.recordingUrl}
             />
           </div>
         )}

@@ -72,7 +72,7 @@ async def vapi_webhook(request: Request):
     msg_type = msg.get("type", "")
     call_id = _extract_call_id(body)
 
-    logger.info(f"[Webhook] type={msg_type!r} call={call_id}")
+    logger.info(f"[Webhook] type={msg_type!r} call={call_id} payload={body}")
 
     if not call_id:
         logger.debug(f"[Webhook] No call_id for event type={msg_type!r} — skipping")
@@ -82,7 +82,7 @@ async def vapi_webhook(request: Request):
     if msg_type == "transcript":
         role = msg.get("role", "unknown")                         # "user" | "assistant"
         transcript_type = msg.get("transcriptType", "final")      # "partial" | "final"
-        text = msg.get("transcript", "") or msg.get("text", "")
+        text = msg.get("transcript", "") or msg.get("message", "") or msg.get("text", "")
         if text:
             import asyncio
             asyncio.create_task(ws_manager.broadcast(call_id, {
