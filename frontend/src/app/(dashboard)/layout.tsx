@@ -9,7 +9,7 @@ const NAV = [
   { href: "/dashboard", icon: FiHome, label: "Overview" },
   { href: "/contacts", icon: FiUsers, label: "Contacts" },
   { href: "/campaigns", icon: FiRadio, label: "Campaigns" },
-  { href: "/calls", icon: FiPhone, label: "Call History" },
+  // { href: "/calls", icon: FiPhone, label: "Call History" },
   { href: "/dialer", icon: FiPhone, label: "Dialer" },
   { href: "/settings", icon: FiSettings, label: "Settings" },
 ];

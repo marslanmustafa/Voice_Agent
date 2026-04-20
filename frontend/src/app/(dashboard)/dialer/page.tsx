@@ -6,6 +6,8 @@ import { useGetCallsQuery, useGetCallQuery } from "@/store/api/allApis";
 import { useAppSelector, useAppDispatch } from "@/store/hooks";
 import { fmtDuration } from "@/lib/utils";
 
+import { CallDetail } from "@/components/CallDetail";
+
 // ─── Status colour map ──────────────────────────────────────────────────────
 
 const STATUS_COLOR: Record<string, string> = {
@@ -54,7 +56,7 @@ export default function CallsPage() {
 
       <div className="grid gap-4" style={{ gridTemplateColumns: "320px 1fr" }}>
         {/* ── Call List ─────────────────────────────────────────────────── */}
-        <div className="h-[calc(100vh-132px)] flex flex-col gap-1 overflow-scroll">
+        <div className="h-[calc(100vh-134px)] flex flex-col gap-1 overflow-scroll">
           {isLoading ? (
             <div className="text-center p-6 text-xs" style={{ color: "var(--color-text3)" }}>
               Loading…
@@ -67,6 +69,7 @@ export default function CallsPage() {
             calls.map((c: any) => {
               const isLive =
                 activeCall.callId === c.id && activeCall.status === "active";
+              const isSelected = selectedId === c.id;
 
               return (
                 <button
@@ -74,8 +77,8 @@ export default function CallsPage() {
                   onClick={() => setSelectedId(c.id)}
                   className="flex items-center gap-3 px-3.5 py-3 rounded-[10px] border w-full text-left transition-all"
                   style={{
-                    background: isLive ? "var(--color-cyan-dim)" : "var(--color-bg2)",
-                    borderColor: isLive ? "rgba(0,212,255,0.25)" : "var(--color-border)",
+                    background: isLive || isSelected ? "var(--color-cyan-dim)" : "var(--color-bg2)",
+                    borderColor: isLive || isSelected ? "rgba(0,212,255,0.25)" : "var(--color-border)",
                     cursor: "pointer",
                   }}
                 >
@@ -125,7 +128,9 @@ export default function CallsPage() {
         </div>
 
         {/* ── Detail Panel ──────────────────────────────────────────────── */}
-        <LiveOrStaticDetail activeCall={activeCall} />
+        <div className="h-[calc(100vh-2px)] overflow-y-auto">
+          <LiveOrStaticDetail activeCall={activeCall} selectedId={selectedId} />
+        </div>
       </div>
 
       <style>{`
@@ -138,11 +143,12 @@ export default function CallsPage() {
   );
 }
 
-// ─── Live view (reads from Redux — no extra SSE connection) ─────────────────
+// ─── Live or Static view (reads from Redux or API) ─────────────────
 
-function LiveOrStaticDetail({ activeCall }: { activeCall: any }) {
+function LiveOrStaticDetail({ activeCall, selectedId }: { activeCall: any; selectedId: string | null }) {
   const isLive = activeCall.callId && activeCall.status === "active";
 
+  // If there is a live call, show it (Redux state)
   if (isLive) {
     return (
       <div
@@ -213,17 +219,28 @@ function LiveOrStaticDetail({ activeCall }: { activeCall: any }) {
     );
   }
 
+  // If a call is selected from the history list, show the enriched details (API fetch)
+  if (selectedId) {
+    return <CallDetail callId={selectedId} />;
+  }
+
+  // Default empty state
   return (
     <div
-      className="flex flex-col items-center justify-center gap-3 rounded-[12px] border p-10 h-full"
+      className="flex flex-col items-center justify-center gap-4 rounded-[16px] border border-dashed p-16 h-full text-center"
       style={{
         background: "var(--color-bg2)",
         borderColor: "var(--color-border)",
         color: "var(--color-text3)",
       }}
     >
-      <FiPhone size={24} />
-      <p className="text-xs">No active call. Use the dialer (bottom-right) to start a call.</p>
+      <div className="w-16 h-16 rounded-full border flex items-center justify-center mb-2" style={{ borderColor: "var(--color-border)", background: "var(--color-bg3)" }}>
+        <FiPhone size={24} className="opacity-50" />
+      </div>
+      <div className="max-w-[200px]">
+        <h4 className="text-sm font-bold mb-1" style={{ color: "var(--color-text2)" }}>Session Viewer</h4>
+        <p className="text-[11px] leading-relaxed">Select a call from the list to view enriched insights and transcripts.</p>
+      </div>
     </div>
   );
 }
