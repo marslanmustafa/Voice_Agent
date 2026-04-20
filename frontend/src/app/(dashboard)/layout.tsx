@@ -2,78 +2,105 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { FiHome, FiUsers, FiRadio, FiPhone, FiSettings, FiArrowRight } from "react-icons/fi";
-import { RiRobot2Line } from "react-icons/ri";
+import {
+  LuLayoutDashboard,
+  LuUsers,
+  LuRadio,
+  LuPhone,
+  LuSettings,
+  LuPhoneCall,
+  LuBot,
+  LuArrowRight,
+} from "react-icons/lu";
 
 const NAV = [
-  { href: "/dashboard", icon: FiHome, label: "Overview" },
-  { href: "/contacts", icon: FiUsers, label: "Contacts" },
-  { href: "/campaigns", icon: FiRadio, label: "Campaigns" },
-  // { href: "/calls", icon: FiPhone, label: "Call History" },
-  { href: "/dialer", icon: FiPhone, label: "Dialer" },
-  { href: "/settings", icon: FiSettings, label: "Settings" },
+  { href: "/dashboard", icon: LuLayoutDashboard, label: "Overview" },
+  { href: "/contacts", icon: LuUsers, label: "Contacts" },
+  { href: "/campaigns", icon: LuRadio, label: "Campaigns" },
+  // { href: "/calls", icon: LuPhoneCall, label: "Call History" },
+  { href: "/dialer", icon: LuPhone, label: "Dialer" },
+  { href: "/settings", icon: LuSettings, label: "Settings" },
 ];
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: "var(--color-bg)" }}>
+    <div className="min-h-screen flex flex-col bg-[#0b0f14] text-white">
       {/* Header */}
-      <header className="sticky top-0 z-50 flex items-center gap-4 px-6 py-3 border-b"
-        style={{ background: "rgba(13,17,23,0.92)", backdropFilter: "blur(12px)", borderColor: "var(--color-border)" }}>
+      <header className="sticky top-0 z-50 flex items-center justify-between px-6 h-14 border-b border-white/5 backdrop-blur-md bg-[#0b0f14]/80">
+        {/* Logo */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-[10px] flex items-center justify-center border"
-            style={{ background: "var(--color-cyan-dim)", borderColor: "rgba(0,212,255,0.2)", color: "var(--color-cyan)" }}>
-            <RiRobot2Line size={18} />
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-cyan-500/10 border border-cyan-400/20 text-cyan-400">
+            <LuBot size={18} />
           </div>
-          <div>
-            <div className="font-bold text-sm" style={{ fontFamily: "var(--font-disp)", color: "#e8f0f8" }}>VoiceAgent</div>
-            <div className="text-[10px]" style={{ color: "var(--color-text2)" }}>AI Calling Platform</div>
+          <div className="leading-tight">
+            <p className="text-sm font-semibold">VoiceofAgent</p>
+            <p className="text-[11px] text-gray-400">
+              AI Calling Platform
+            </p>
           </div>
         </div>
 
-        <Link href="/campaigns"
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[8px] text-xs font-bold transition-all hover:-translate-y-px ml-2"
-          style={{ background: "var(--color-cyan)", color: "#000" }}>
-          <FiRadio size={11} /> New Campaign <FiArrowRight size={10} />
+        {/* CTA */}
+        <Link
+          href="/campaigns"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-cyan-400 text-black hover:bg-cyan-300 transition"
+        >
+          <LuRadio size={14} />
+          New Campaign
+          <LuArrowRight size={14} />
         </Link>
       </header>
 
       <div className="flex flex-1 min-h-0">
         {/* Sidebar */}
-        <aside className="w-[210px] flex-shrink-0 flex flex-col border-r sticky top-[57px] h-[calc(100vh-57px)] overflow-y-auto"
-          style={{ background: "var(--color-bg2)", borderColor: "var(--color-border)" }}>
-          <div className="px-4 pt-3.5 pb-2 text-[9px] font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--color-text3)" }}>
+        <aside className="w-56 flex flex-col border-r border-white/5 bg-[#0a0e13]">
+          <div className="px-4 pt-4 pb-2 text-[10px] font-semibold tracking-wider text-gray-500 uppercase">
             Navigation
           </div>
-          <nav className="flex flex-col gap-0.5 px-2 flex-1">
+
+          <nav className="flex flex-col gap-1 px-2">
             {NAV.map(({ href, icon: Icon, label }) => {
-              const active = pathname === href || pathname.startsWith(href + "/");
+              const active =
+                pathname === href || pathname.startsWith(href + "/");
+
               return (
-                <Link key={href} href={href}
-                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-[8px] text-xs transition-all relative"
-                  style={{
-                    background: active ? "var(--color-cyan-dim)" : "transparent",
-                    color: active ? "var(--color-cyan)" : "var(--color-text2)",
-                    border: active ? "1px solid rgba(0,212,255,0.15)" : "1px solid transparent",
-                  }}>
-                  <Icon size={14} />
+                <Link
+                  key={href}
+                  href={href}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all
+                  ${active
+                      ? "bg-cyan-500/10 text-cyan-400 border border-cyan-400/20"
+                      : "text-gray-400 hover:bg-white/5 hover:text-white"
+                    }`}
+                >
+                  <Icon size={16} />
                   <span className="flex-1">{label}</span>
-                  {active && <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--color-cyan)" }} />}
+
+                  {active && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                  )}
                 </Link>
               );
             })}
           </nav>
-          <div className="p-4 mt-auto border-t" style={{ borderColor: "var(--color-border)" }}>
-            <div className="flex items-center gap-2 text-[10px]" style={{ color: "var(--color-text3)" }}>
-              <RiRobot2Line size={13} /> VoiceAgent v2.0
+
+          {/* Footer */}
+          <div className="mt-auto p-4 border-t border-white/5">
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <LuBot size={14} />
+              VoiceofAgent v2.0
             </div>
           </div>
         </aside>
 
-        {/* Main */}
-        <main className="flex-1 overflow-y-auto p-8 min-h-[calc(100vh-340px)]">
+        {/* Main Content */}
+        <main className="flex-1 overflow-y-auto p-6 md:p-8 lg:p-10">
           {children}
         </main>
       </div>
