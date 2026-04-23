@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Providers } from "./providers";
 import "./globals.css";
+import "../bones/registry.js";
 
 export const metadata: Metadata = {
   title: "VoiceAgent | AI Calling Platform",

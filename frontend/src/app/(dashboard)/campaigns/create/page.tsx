@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { FiArrowLeft, FiPlus, FiPlay, FiActivity, FiInfo, FiDownload, FiFileText, FiClock } from "react-icons/fi";
 import { useCreateCampaignMutation, useStartCampaignMutation, useGetContactsQuery, useGetConfigQuery, useGetPhoneNumbersQuery } from "@/store/api/allApis";
+import { Skeleton } from "boneyard-js/react";
 
 interface PhoneNumber {
   id: string;
@@ -126,26 +127,27 @@ export default function CreateCampaignPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 max-w-[1200px]">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Link href="/campaigns" className="inline-flex items-center gap-1.5 text-xs transition-all"
-          style={{ color: "var(--color-text2)", textDecoration: "none", width: "fit-content" }}
-          onMouseEnter={(e) => e.currentTarget.style.color = "var(--color-cyan)"}
-          onMouseLeave={(e) => e.currentTarget.style.color = "var(--color-text2)"}>
-          <FiArrowLeft size={12}/> Back to Campaigns
-        </Link>
-      </div>
+    <Skeleton name="campaign-create" loading={!configData && !phoneNumbersData}>
+      <div className="flex flex-col gap-6 w-full max-w-[1200px] px-2 md:px-0">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <Link href="/campaigns" className="inline-flex items-center gap-1.5 text-xs transition-all"
+            style={{ color: "var(--color-text2)", textDecoration: "none", width: "fit-content" }}
+            onMouseEnter={(e) => e.currentTarget.style.color = "var(--color-cyan)"}
+            onMouseLeave={(e) => e.currentTarget.style.color = "var(--color-text2)"}>
+            <FiArrowLeft size={12}/> Back to Campaigns
+          </Link>
+        </div>
 
-      <div className="flex items-center gap-3">
-        <div className="w-12 h-12 rounded-[14px] bg-[var(--color-cyan-dim)] text-[var(--color-cyan)] flex items-center justify-center border border-[rgba(0,212,255,0.3)]">
-          <FiActivity size={22} />
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-[14px] bg-[var(--color-cyan-dim)] text-[var(--color-cyan)] flex items-center justify-center border border-[rgba(0,212,255,0.3)]">
+            <FiActivity size={22} />
+          </div>
+          <div>
+            <h1 className="text-2xl md:text-[28px] font-extrabold tracking-wide" style={{ fontFamily: "var(--font-disp)", background: "linear-gradient(135deg, var(--color-cyan) 0%, #F5DEB3 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Create Campaign</h1>
+            <p className="text-xs text-[var(--color-text2)] mt-1">Set up a new outbound calling campaign</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-extrabold" style={{ fontFamily: "var(--font-disp)" }}>Create Campaign</h1>
-          <p className="text-xs text-[var(--color-text2)] mt-1">Set up a new outbound calling campaign</p>
-        </div>
-      </div>
 
       {createError && (
         <div className="px-4 py-3 rounded-[10px] border text-xs" style={{
@@ -252,7 +254,7 @@ export default function CreateCampaignPage() {
           {!campaignId && scheduleType === 'later' && (
             <div>
               <label className="block text-[13px] font-medium text-[var(--color-text)] mb-3">Start at:</label>
-              <div className="flex gap-4">
+              <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1">
                   <label className="block text-[12px] text-[var(--color-text3)] mb-2">Date</label>
                   <div className="relative">
@@ -291,7 +293,7 @@ export default function CreateCampaignPage() {
           )}
 
           {!campaignId && (
-            <button className="w-full bg-[var(--color-cyan)] text-black font-bold text-[13px] py-3 rounded-xl hover:bg-[#00e5ff] transition-colors mt-2" onClick={handleCreate} disabled={creating}>
+            <button className="w-full font-bold text-[13px] py-3 rounded-xl transition-colors mt-2 text-black hover:opacity-90" style={{ background: "linear-gradient(135deg, #00d4ff 0%, #F5DEB3 100%)" }} onClick={handleCreate} disabled={creating}>
               {creating ? "Creating..." : "Initialize Campaign"}
             </button>
           )}
@@ -350,6 +352,7 @@ export default function CreateCampaignPage() {
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </Skeleton>
   );
 }

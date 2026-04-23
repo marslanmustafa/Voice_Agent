@@ -9,6 +9,7 @@ import {
 } from "react-icons/fi";
 import { useGetCampaignQuery, useStartCampaignMutation, useControlCampaignMutation, useGetCallsQuery, useGetCallQuery, useEndCallMutation } from "@/store/api/allApis";
 import { fmtDuration } from "@/lib/utils";
+import { Skeleton } from "boneyard-js/react";
 
 const STATUS_META: Record<string, { color: string; label: string }> = {
   draft:     { color: "var(--color-text3)",  label: "Draft"     },
@@ -43,52 +44,62 @@ export default function CampaignDetailPage() {
   const [startCampaign] = useStartCampaignMutation();
   const [controlCampaign] = useControlCampaignMutation();
 
-  if (campLoading) return <LoadingState />;
-  if (!campaign) return <NotFoundState />;
+  if (!campaign && !campLoading) return <NotFoundState />;
 
-  const meta = STATUS_META[campaign.status] ?? STATUS_META.draft;
-  const pct = campaign.call_count > 0
-    ? Math.round((campaign.completed_count / campaign.call_count) * 100) : 0;
+  const c = campaign || {
+    name: "Loading Campaign...",
+    status: "draft",
+    callsCounterScheduled: 0,
+    callsCounterQueued: 0,
+    callsCounterInProgress: 0,
+    callsCounterEnded: 0,
+    callsCounterEndedVoicemail: 0,
+  };
+
+  const meta = STATUS_META[c.status] ?? STATUS_META.draft;
+  const pct = c.call_count > 0
+    ? Math.round((c.completed_count / c.call_count) * 100) : 0;
 
   const calls = callsData?.calls ?? [];
-  const totalCalls = (campaign.callsCounterScheduled || 0) + (campaign.callsCounterQueued || 0) + (campaign.callsCounterInProgress || 0) + (campaign.callsCounterEnded || 0) || calls.length;
-  const endedCalls = campaign.callsCounterEnded || calls.filter((c: any) => ["completed", "failed", "voicemail", "busy", "no-answer", "cancelled"].includes(c.status)).length;
+  const totalCalls = (c.callsCounterScheduled || 0) + (c.callsCounterQueued || 0) + (c.callsCounterInProgress || 0) + (c.callsCounterEnded || 0) || calls.length;
+  const endedCalls = c.callsCounterEnded || calls.filter((c: any) => ["completed", "failed", "voicemail", "busy", "no-answer", "cancelled"].includes(c.status)).length;
   const pickedUpCalls = calls.filter((c: any) => c.status === "completed" || c.status === "active").length;
-  const voicemailCalls = campaign.callsCounterEndedVoicemail || calls.filter((c: any) => c.status === "voicemail").length;
+  const voicemailCalls = c.callsCounterEndedVoicemail || calls.filter((c: any) => c.status === "voicemail").length;
 
   return (
-    <div className="flex flex-col gap-8 max-w-[1200px]">
-      {/* Header */}
-      <div className="flex flex-col gap-4">
-        <div className="flex justify-between items-start">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-[22px] font-bold text-[var(--color-text)] tracking-wide font-disp">{campaign.name || "Campaign"}</h1>
-              <button className="text-[var(--color-text3)] hover:text-[var(--color-text2)] transition-colors"><FiCopy size={14}/></button>
+    <Skeleton name="campaign-detail" loading={campLoading}>
+      <div className="flex flex-col gap-8 w-full max-w-[1200px] px-2 md:px-0">
+        {/* Header */}
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <h1 className="text-[22px] md:text-[28px] font-bold tracking-wide font-disp" style={{ background: "linear-gradient(135deg, var(--color-cyan) 0%, #F5DEB3 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{c.name || "Campaign"}</h1>
+                <button className="text-[var(--color-text3)] hover:text-[var(--color-text2)] transition-colors"><FiCopy size={14}/></button>
+              </div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[13px] text-[var(--color-text2)]">Arslan</span>
+                <button className="text-[var(--color-text3)] hover:text-[var(--color-text2)] transition-colors"><FiCopy size={12}/></button>
+              </div>
+              <div className="text-[13px] text-[var(--color-text3)]">Unknown Phone Number</div>
             </div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[13px] text-[var(--color-text2)]">Arslan</span>
-              <button className="text-[var(--color-text3)] hover:text-[var(--color-text2)] transition-colors"><FiCopy size={12}/></button>
-            </div>
-            <div className="text-[13px] text-[var(--color-text3)]">Unknown Phone Number</div>
-          </div>
 
-          <div className="flex gap-2 items-center">
-            {campaign.status !== "running" && campaign.status !== "completed" && (
-              <button className="flex items-center gap-2 px-4 py-2 border border-[rgba(0,212,255,0.5)] bg-[rgba(0,212,255,0.1)] text-[var(--color-cyan)] rounded-xl text-[13px] font-medium hover:bg-[rgba(0,212,255,0.2)] transition-colors" onClick={async () => { await startCampaign({ campaignId: id }); refetch(); }}>
-                <FiPlay size={14}/> Launch Campaign
-              </button>
-            )}
-            {campaign.status === "running" && (
-              <button className="flex items-center gap-2 px-4 py-2 border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.05)] text-[var(--color-red)] rounded-xl text-[13px] font-medium hover:bg-[rgba(239,68,68,0.1)] transition-colors" onClick={async () => { if (!confirm("Cancel this campaign?")) return; await controlCampaign({ campaignId: id, action: "stop" }); }}>
-                Cancel Campaign <FiXCircle size={14}/>
-              </button>
-            )}
+            <div className="flex flex-wrap gap-2 items-center w-full md:w-auto">
+              {c.status !== "running" && c.status !== "completed" && (
+                <button className="flex-1 md:flex-none flex justify-center items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium text-black transition-colors hover:opacity-90" style={{ background: "linear-gradient(135deg, #00d4ff 0%, #F5DEB3 100%)", border: "none" }} onClick={async () => { await startCampaign({ campaignId: id }); refetch(); }}>
+                  <FiPlay size={14}/> Launch Campaign
+                </button>
+              )}
+              {c.status === "running" && (
+                <button className="flex-1 md:flex-none flex justify-center items-center gap-2 px-4 py-2 border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.05)] text-[var(--color-red)] rounded-xl text-[13px] font-medium hover:bg-[rgba(239,68,68,0.1)] transition-colors" onClick={async () => { if (!confirm("Cancel this campaign?")) return; await controlCampaign({ campaignId: id, action: "stop" }); }}>
+                  Cancel Campaign <FiXCircle size={14}/>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
 
         {/* Stats row */}
-        <div className="grid grid-cols-4 gap-4 mt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
           {/* Total Calls */}
           <div className="bg-[var(--color-bg2)] border border-[var(--color-border)] rounded-2xl p-4 flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-[var(--color-bg3)] border border-[var(--color-border2)] flex items-center justify-center text-[var(--color-text3)]">
@@ -215,6 +226,7 @@ export default function CampaignDetailPage() {
          </div>
       )}
     </div>
+    </Skeleton>
   );
 }
 
