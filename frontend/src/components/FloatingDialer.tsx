@@ -193,7 +193,8 @@ function ActiveCallPanel({
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript]);
 
-  const isTerminal = ["ended", "failed", "no-answer", "busy", "cancelled"].includes(status);
+  // const isTerminal = ["ended", "failed", "no-answer", "busy", "cancelled"].includes(status);
+  const isTerminal = true
 
   return (
     <div

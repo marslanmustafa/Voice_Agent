@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { FiArrowLeft, FiPlus, FiPlay, FiActivity } from "react-icons/fi";
+import { FiArrowLeft, FiPlus, FiPlay, FiActivity, FiInfo, FiDownload, FiFileText, FiClock } from "react-icons/fi";
 import { useCreateCampaignMutation, useStartCampaignMutation, useGetContactsQuery, useGetConfigQuery, useGetPhoneNumbersQuery } from "@/store/api/allApis";
 
 interface PhoneNumber {
@@ -22,6 +22,7 @@ const S = {
 export default function CreateCampaignPage() {
   const [form, setForm] = useState({ name: "", assistantId: "", phoneNumberId: "" });
   const [campaignId, setCampaignId] = useState<string | null>(null);
+  const [scheduleType, setScheduleType] = useState<"now" | "later">("later");
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [createError, setCreateError] = useState<string | null>(null);
   const { data: contactsData } = useGetContactsQuery({});
@@ -158,95 +159,156 @@ export default function CreateCampaignPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
         {/* Setup Block */}
-        <div className="p-5 rounded-[16px] border bg-[var(--color-bg2)] border-[var(--color-border)] flex flex-col gap-4">
-          <h3 className="text-sm font-bold border-b pb-3 border-[var(--color-border)] flex justify-between items-center">
-            1. Campaign Setup
-            {campaignId && (
-              <span className="text-[10px] text-[var(--color-green)] bg-[var(--color-green-dim)] px-2 py-0.5 rounded-md">
-                CREATED: {campaignId}
-              </span>
-            )}
-          </h3>
-
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text2)]">Campaign Name *</label>
-              <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={S.input} placeholder="e.g., Q3 Follow-ups" disabled={!!campaignId} />
-            </div>
-            <div className="flex gap-3">
-              <div className="flex flex-col gap-1.5 flex-1">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text2)]">Assistant ID *</label>
-                <input type="text" value={form.assistantId} onChange={e => setForm({ ...form, assistantId: e.target.value })} style={S.input} placeholder="ast_xyz123" disabled={!!campaignId} />
-              </div>
-              <div className="flex flex-col gap-1.5 flex-1">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text2)]">Phone Number ID *</label>
-                {phoneNumbersData && phoneNumbersData.length > 0 ? (
-                  <select
-                    value={form.phoneNumberId}
-                    onChange={e => setForm({ ...form, phoneNumberId: e.target.value })}
-                    style={{ ...S.input, cursor: "pointer" }}
-                    disabled={!!campaignId}>
-                    <option value="">— Select a phone number —</option>
-                    {phoneNumbersData.map((pn: PhoneNumber) => (
-                      <option key={pn.id} value={pn.id}>{pn.name || pn.number} ({pn.provider})</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input type="text" value={form.phoneNumberId} onChange={e => setForm({ ...form, phoneNumberId: e.target.value })} style={S.input} placeholder="Required (e.g. pnz_xxx)" disabled={!!campaignId} />
-                )}
-              </div>
-            </div>
-
-            {/* Contact Selection */}
-            {!campaignId && (
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text2)]">
-                  Contacts <span className="font-normal text-[var(--color-text3)]">({selectedContacts.length} selected)</span>
-                </label>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {selectedContacts.map((cid) => {
-                    const contact = contactsData?.contacts?.find((c: any) => c.id === cid);
-                    return (
-                      <span key={cid} className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-[var(--color-cyan-dim)] text-[var(--color-cyan)] border border-[rgba(0,212,255,0.2)]">
-                        {contact?.name || cid} ({contact?.phone})
-                      </span>
-                    );
-                  })}
-                </div>
-                <select
-                  value=""
-                  onChange={(e) => { const v = e.target.value; if (v && !selectedContacts.includes(v)) setSelectedContacts((p) => [...p, v]); }}
-                  style={{ ...S.input, cursor: "pointer" }}>
-                  <option value="">— Add a contact —</option>
-                  {contactsData?.contacts?.filter((c: any) => !selectedContacts.includes(c.id)).map((c: any) => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
-                  ))}
-                </select>
-              </div>
-            )}
+        <div className="flex flex-col gap-6">
+          {/* Campaign Name */}
+          <div>
+            <label className="block text-[13px] font-medium text-[var(--color-text)] mb-2">Campaign Name</label>
+            <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full bg-[var(--color-bg2)] border border-[var(--color-border)] rounded-xl px-4 py-3 text-[13px] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-cyan)]" placeholder="Campaign Name" disabled={!!campaignId} />
           </div>
 
+          {/* Phone Number */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <label className="block text-[13px] font-medium text-[var(--color-text)]">Phone Number</label>
+              <FiInfo className="text-[var(--color-text3)]" size={14} />
+            </div>
+            <div className="relative">
+              <select value={form.phoneNumberId} onChange={e => setForm({ ...form, phoneNumberId: e.target.value })} className="w-full bg-[var(--color-bg2)] border border-[var(--color-border)] rounded-xl px-4 py-3 text-[13px] text-[var(--color-text2)] focus:outline-none appearance-none cursor-pointer" disabled={!!campaignId}>
+                <option value="">Select</option>
+                {phoneNumbersData?.map((pn: PhoneNumber) => (
+                  <option key={pn.id} value={pn.id}>{pn.name || pn.number} ({pn.provider})</option>
+                ))}
+              </select>
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 6L0 0H10L5 6Z" fill="#666"/></svg>
+              </div>
+            </div>
+          </div>
+
+          {/* Best Practices Callout */}
+          <div className="bg-[var(--color-bg2)] rounded-xl p-4 flex gap-3 border border-[var(--color-border)] shadow-sm">
+            <FiInfo className="text-[var(--color-text3)] mt-0.5 flex-shrink-0" size={16} />
+            <div>
+              <div className="text-[13px] text-[var(--color-text)] mb-1">Best Practices</div>
+              <div className="text-[12px] text-[var(--color-text3)] leading-relaxed">
+                Learn how to avoid spam flagging and optimize your calling strategy for better success rates. <a href="#" className="underline decoration-[var(--color-text3)] underline-offset-2 hover:text-[var(--color-text)] transition-colors">Spam flagging best practices</a>
+              </div>
+            </div>
+          </div>
+
+          {/* Upload CSV */}
           {!campaignId && (
-            <button style={{ ...S.btnPrimary, width: '100%' }} onClick={handleCreate} disabled={creating}>
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-[13px] font-medium text-[var(--color-text)]">Upload CSV</label>
+                <button className="flex items-center gap-2 text-[12px] text-[var(--color-text2)] border border-[var(--color-border)] px-3 py-1.5 rounded-lg hover:bg-[var(--color-bg3)] transition-colors">
+                  <FiDownload size={14} /> Download template
+                </button>
+              </div>
+              <div className="border border-dashed border-[var(--color-border)] rounded-xl bg-[var(--color-bg2)] p-8 flex flex-col items-center justify-center cursor-pointer hover:border-[var(--color-text3)] transition-colors group">
+                <FiFileText className="text-[var(--color-text3)] mb-4 group-hover:text-[var(--color-text2)] transition-colors" size={32} />
+                <div className="text-[13px] text-[var(--color-text2)] mb-1">Drag and drop a CSV file here or click to select file locally</div>
+                <div className="text-[12px] text-[var(--color-text3)]">Maximum file size: 5MB</div>
+              </div>
+            </div>
+          )}
+
+          {/* Assistant */}
+          <div>
+            <label className="block text-[13px] font-medium text-[var(--color-text)] mb-2">Assistant</label>
+            <div className="relative">
+              <select value={form.assistantId} onChange={e => setForm({ ...form, assistantId: e.target.value })} className="w-full bg-[var(--color-bg2)] border border-[var(--color-border)] rounded-xl px-4 py-3 text-[13px] text-[var(--color-text2)] focus:outline-none appearance-none cursor-pointer" disabled={!!campaignId}>
+                <option value="">Select</option>
+                <option value={configData?.vapi_assistant_id || "ast_xyz"}>Configured Assistant ({configData?.vapi_assistant_id || "Not Set"})</option>
+              </select>
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 6L0 0H10L5 6Z" fill="#666"/></svg>
+              </div>
+            </div>
+          </div>
+
+          {/* Choose when to send */}
+          {!campaignId && (
+            <div>
+              <label className="block text-[13px] font-medium text-[var(--color-text)] mb-3">Choose when to send</label>
+              <div className="flex gap-4">
+                <div onClick={() => setScheduleType('now')} className={`flex-1 border rounded-xl p-4 flex items-center gap-3 cursor-pointer transition-colors ${scheduleType === 'now' ? 'border-[var(--color-cyan)] bg-[rgba(0,212,255,0.03)]' : 'border-[var(--color-border)] bg-[var(--color-bg2)]'}`}>
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${scheduleType === 'now' ? 'border-[var(--color-cyan)]' : 'border-[var(--color-border)]'}`}>
+                    {scheduleType === 'now' && <div className="w-2 h-2 rounded-full bg-[var(--color-cyan)]"></div>}
+                  </div>
+                  <span className="text-[13px] text-[var(--color-text)]">Send Now</span>
+                </div>
+                <div onClick={() => setScheduleType('later')} className={`flex-1 border rounded-xl p-4 flex items-center gap-3 cursor-pointer transition-colors ${scheduleType === 'later' ? 'border-[var(--color-cyan)] bg-[rgba(0,212,255,0.03)]' : 'border-[var(--color-border)] bg-[var(--color-bg2)]'}`}>
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${scheduleType === 'later' ? 'border-[var(--color-cyan)]' : 'border-[var(--color-border)]'}`}>
+                    {scheduleType === 'later' && <div className="w-2 h-2 rounded-full bg-[var(--color-cyan)]"></div>}
+                  </div>
+                  <span className="text-[13px] text-[var(--color-text)]">Schedule for later</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Start at: */}
+          {!campaignId && scheduleType === 'later' && (
+            <div>
+              <label className="block text-[13px] font-medium text-[var(--color-text)] mb-3">Start at:</label>
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="block text-[12px] text-[var(--color-text3)] mb-2">Date</label>
+                  <div className="relative">
+                    <select className="w-full bg-[var(--color-bg2)] border border-[var(--color-border)] rounded-xl px-4 py-3 text-[13px] text-[var(--color-text)] focus:outline-none appearance-none cursor-pointer">
+                      <option>Today</option>
+                      <option>Tomorrow</option>
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col pointer-events-none">
+                      <svg width="8" height="5" viewBox="0 0 8 5" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-[2px]"><path d="M4 0L8 5H0L4 0Z" fill="#666"/></svg>
+                      <svg width="8" height="5" viewBox="0 0 8 5" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 5L0 0H8L4 5Z" fill="#666"/></svg>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-[12px] text-[var(--color-text3)] mb-2">Time</label>
+                  <div className="relative">
+                    <input type="text" defaultValue="12:49 PM" className="w-full bg-[var(--color-bg2)] border border-[var(--color-border)] rounded-xl px-4 py-3 text-[13px] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-cyan)]" />
+                    <FiClock className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-text3)] pointer-events-none" />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-[12px] text-[var(--color-text3)] mb-2">Timezone</label>
+                  <div className="relative">
+                    <select className="w-full bg-[var(--color-bg2)] border border-[var(--color-border)] rounded-xl px-4 py-3 text-[13px] text-[var(--color-text)] focus:outline-none appearance-none cursor-pointer">
+                      <option>Asia/Karachi (GM...</option>
+                      <option>America/New_York</option>
+                      <option>Europe/London</option>
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 6L0 0H10L5 6Z" fill="#666"/></svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!campaignId && (
+            <button className="w-full bg-[var(--color-cyan)] text-black font-bold text-[13px] py-3 rounded-xl hover:bg-[#00e5ff] transition-colors mt-2" onClick={handleCreate} disabled={creating}>
               {creating ? "Creating..." : "Initialize Campaign"}
             </button>
           )}
 
           {campaignId && (
-            <div className="flex flex-col gap-2">
-              <Link
-                href={`/campaigns/${campaignId}`}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] text-xs font-bold transition-all"
-                style={{ background: "var(--color-cyan-dim)", color: "var(--color-cyan)", border: "1px solid rgba(0,212,255,0.25)", textDecoration: "none" }}
-              >
-                View Campaign Details
-              </Link>
+            <div className="flex flex-col gap-3 mt-2">
+              <div className="p-4 rounded-xl border border-[var(--color-green)] bg-[rgba(0,255,0,0.05)] text-center">
+                <span className="text-[13px] text-[var(--color-green)] font-semibold">
+                  Campaign initialized successfully! (ID: {campaignId})
+                </span>
+              </div>
               <button
-                style={{ ...S.btnPrimary, width: '100%', background: 'var(--color-green)', borderColor: 'var(--color-green)' }}
+                className="w-full bg-[var(--color-green)] text-black font-bold text-[13px] py-3 rounded-xl hover:bg-[#00cc00] transition-colors flex items-center justify-center gap-2"
                 onClick={handleStart}
                 disabled={starting}
               >
-                <FiPlay /> {starting ? "Starting..." : "Start Outbound Calls"}
+                <FiPlay /> {starting ? "Starting Calls..." : "Start Outbound Calls Now"}
               </button>
             </div>
           )}

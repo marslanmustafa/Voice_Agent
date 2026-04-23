@@ -48,7 +48,9 @@ app.add_middleware(
         settings.FRONTEND_URL,
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "https://q641qxfx-3000.inc1.devtunnels.ms"
+        "https://q641qxfx-3000.inc1.devtunnels.ms",
+        "https://voice-agent-fyp.vercel.app",
+        "https://voice.marslanmustafa.com"
     ],
     allow_credentials=True,
     allow_methods=["*"],

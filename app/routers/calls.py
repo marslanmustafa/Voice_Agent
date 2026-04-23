@@ -103,19 +103,38 @@ def _normalize_status(vapi_status: str) -> str:
 
 @router.get("", response_model=CallListResponse)
 async def list_calls(
+    campaign_id: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    assistant_id = settings.VAPI_ASSISTANT_ID
-    if not assistant_id:
-        return CallListResponse(calls=[], total=0)
+    raw_calls = []
+    if campaign_id:
+        try:
+            campaign = await vapi_service.get_campaign(campaign_id)
+            calls_dict = campaign.get("calls", {})
+            call_ids = list(calls_dict.keys())
+            
+            if call_ids:
+                tasks = [vapi_service.get_call(cid) for cid in call_ids]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for res in results:
+                    if isinstance(res, dict) and "id" in res:
+                        raw_calls.append(res)
+                    elif isinstance(res, Exception):
+                        logger.warning(f"Failed to fetch call: {res}")
+        except VapiError as e:
+            logger.error(f"Error fetching campaign calls: {e}")
+    else:
+        assistant_id = settings.VAPI_ASSISTANT_ID
+        if not assistant_id:
+            return CallListResponse(calls=[], total=0)
 
-    try:
-        raw_calls = await vapi_service.list_calls(assistant_id, limit=page_size)
-    except VapiError:
-        raw_calls = []
+        try:
+            raw_calls = await vapi_service.list_calls(assistant_id, limit=page_size)
+        except VapiError:
+            pass
 
     phones = [
         c.get("customer", {}).get("number")

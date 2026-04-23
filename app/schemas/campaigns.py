@@ -36,6 +36,11 @@ class CampaignResponse(BaseModel):
     name: str
     status: str = "draft"
     created_at: str
+    callsCounterScheduled: Optional[int] = 0
+    callsCounterQueued: Optional[int] = 0
+    callsCounterInProgress: Optional[int] = 0
+    callsCounterEndedVoicemail: Optional[int] = 0
+    callsCounterEnded: Optional[int] = 0
 
 class CampaignListResponse(BaseModel):
     campaigns: List[CampaignResponse]

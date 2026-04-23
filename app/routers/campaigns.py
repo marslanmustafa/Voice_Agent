@@ -28,6 +28,11 @@ def _parse_vapi_campaign(c: dict) -> CampaignResponse:
         name=c.get("name", "Unnamed Campaign"),
         status=c.get("status", "unknown"),
         created_at=c.get("createdAt", ""),
+        callsCounterScheduled=c.get("callsCounterScheduled", 0),
+        callsCounterQueued=c.get("callsCounterQueued", 0),
+        callsCounterInProgress=c.get("callsCounterInProgress", 0),
+        callsCounterEndedVoicemail=c.get("callsCounterEndedVoicemail", 0),
+        callsCounterEnded=c.get("callsCounterEnded", 0),
     )
 
 

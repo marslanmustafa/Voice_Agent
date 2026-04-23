@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   FiArrowLeft, FiPhone, FiMic, FiClock, FiPlay, FiStopCircle, FiCheck, FiRadio,
-  FiChevronRight, FiUser, FiTrash2,
+  FiChevronRight, FiUser, FiTrash2, FiCopy, FiPhoneCall, FiPhoneForwarded, FiVoicemail, FiCheckCircle, FiXCircle, FiX
 } from "react-icons/fi";
 import { useGetCampaignQuery, useStartCampaignMutation, useControlCampaignMutation, useGetCallsQuery, useGetCallQuery, useEndCallMutation } from "@/store/api/allApis";
 import { fmtDuration } from "@/lib/utils";
@@ -50,131 +50,170 @@ export default function CampaignDetailPage() {
   const pct = campaign.call_count > 0
     ? Math.round((campaign.completed_count / campaign.call_count) * 100) : 0;
 
-  return (
-    <div className="flex flex-col gap-5">
-      {/* Header */}
-      <div className="flex flex-col gap-3">
-        <Link href="/campaigns" className="inline-flex items-center gap-1.5 text-xs transition-all"
-          style={{ color: "var(--color-text2)", textDecoration: "none", width: "fit-content" }}
-          onMouseEnter={(e) => e.currentTarget.style.color = "var(--color-cyan)"}
-          onMouseLeave={(e) => e.currentTarget.style.color = "var(--color-text2)"}>
-          <FiArrowLeft size={12}/> Back to Campaigns
-        </Link>
+  const calls = callsData?.calls ?? [];
+  const totalCalls = (campaign.callsCounterScheduled || 0) + (campaign.callsCounterQueued || 0) + (campaign.callsCounterInProgress || 0) + (campaign.callsCounterEnded || 0) || calls.length;
+  const endedCalls = campaign.callsCounterEnded || calls.filter((c: any) => ["completed", "failed", "voicemail", "busy", "no-answer", "cancelled"].includes(c.status)).length;
+  const pickedUpCalls = calls.filter((c: any) => c.status === "completed" || c.status === "active").length;
+  const voicemailCalls = campaign.callsCounterEndedVoicemail || calls.filter((c: any) => c.status === "voicemail").length;
 
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-[12px] border flex items-center justify-center"
-              style={{ background: `${meta.color}20`, borderColor: `${meta.color}40`, color: meta.color }}>
-              <FiRadio size={18}/>
+  return (
+    <div className="flex flex-col gap-8 max-w-[1200px]">
+      {/* Header */}
+      <div className="flex flex-col gap-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="text-[22px] font-bold text-[var(--color-text)] tracking-wide font-disp">{campaign.name || "Campaign"}</h1>
+              <button className="text-[var(--color-text3)] hover:text-[var(--color-text2)] transition-colors"><FiCopy size={14}/></button>
             </div>
-            <div>
-              <div className="flex items-center gap-2.5 mb-0.5">
-                <h1 className="text-[20px] font-extrabold" style={{ fontFamily: "var(--font-disp)", color: "var(--color-text)" }}>{campaign.name}</h1>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider"
-                  style={{ color: meta.color, background: `${meta.color}15`, borderColor: `${meta.color}40` }}>{meta.label}</span>
-              </div>
-              {campaign.topic && <p className="text-[11px]" style={{ color: "var(--color-text2)" }}>{campaign.topic}</p>}
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[13px] text-[var(--color-text2)]">Arslan</span>
+              <button className="text-[var(--color-text3)] hover:text-[var(--color-text2)] transition-colors"><FiCopy size={12}/></button>
             </div>
+            <div className="text-[13px] text-[var(--color-text3)]">Unknown Phone Number</div>
           </div>
 
-          {/* Campaign controls */}
           <div className="flex gap-2 items-center">
             {campaign.status !== "running" && campaign.status !== "completed" && (
-              <button style={S.btnPrimary} onClick={async () => { await startCampaign({ campaignId: id }); refetch(); }}>
-                <FiPlay size={12}/> Launch Campaign
+              <button className="flex items-center gap-2 px-4 py-2 border border-[rgba(0,212,255,0.5)] bg-[rgba(0,212,255,0.1)] text-[var(--color-cyan)] rounded-xl text-[13px] font-medium hover:bg-[rgba(0,212,255,0.2)] transition-colors" onClick={async () => { await startCampaign({ campaignId: id }); refetch(); }}>
+                <FiPlay size={14}/> Launch Campaign
               </button>
             )}
             {campaign.status === "running" && (
-              <button style={S.btnDanger} onClick={async () => { if (!confirm("Cancel this campaign?")) return; await controlCampaign({ campaignId: id, action: "stop" }); }}>
-                <FiStopCircle size={12}/> Cancel Campaign
+              <button className="flex items-center gap-2 px-4 py-2 border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.05)] text-[var(--color-red)] rounded-xl text-[13px] font-medium hover:bg-[rgba(239,68,68,0.1)] transition-colors" onClick={async () => { if (!confirm("Cancel this campaign?")) return; await controlCampaign({ campaignId: id, action: "stop" }); }}>
+                Cancel Campaign <FiXCircle size={14}/>
               </button>
             )}
           </div>
         </div>
 
         {/* Stats row */}
-        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
-          {[
-            ["Contacts", campaign.contact_count, "var(--color-cyan)"],
-            ["Total Calls", "N/A", "var(--color-text2)"],
-            ["Completed", "N/A", "var(--color-green)"],
-            ["Completion", "N/A", meta.color],
-          ].map(([label, value, color]) => (
-            <div key={label as string} className="flex flex-col gap-1 p-3.5 rounded-[10px] border" style={S.card}>
-              <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--color-text2)" }}>{label}</span>
-              <span className="text-[18px] font-bold" style={{ color: color as string, fontFamily: "var(--font-disp)" }}>{value}</span>
+        <div className="grid grid-cols-4 gap-4 mt-2">
+          {/* Total Calls */}
+          <div className="bg-[var(--color-bg2)] border border-[var(--color-border)] rounded-2xl p-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-[var(--color-bg3)] border border-[var(--color-border2)] flex items-center justify-center text-[var(--color-text3)]">
+              <FiPhoneCall size={16}/>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Calls section */}
-      <div className="flex flex-col gap-3">
-        <h2 className="text-[15px] font-bold" style={{ fontFamily: "var(--font-disp)", color: "var(--color-text)" }}>
-          Calls ({callsData?.calls?.length ?? 0})
-        </h2>
-
-        <div className="grid gap-4" style={{ gridTemplateColumns: "360px 1fr" }}>
-          {/* Calls list */}
-          <div className="flex flex-col gap-1">
-            {callsLoading ? (
-              <div className="text-center p-6 text-xs" style={{ color: "var(--color-text3)" }}>Loading…</div>
-            ) : !callsData?.calls?.length ? (
-              <div className="flex flex-col items-center gap-3 p-8 rounded-[12px] border text-center"
-                style={{ background: "var(--color-bg2)", borderColor: "var(--color-border)", color: "var(--color-text3)" }}>
-                <FiPhone size={20}/>
-                <p className="text-xs" style={{ color: "var(--color-text2)" }}>No calls yet</p>
-                {campaign.status === "draft" && (
-                  <p className="text-[10px]" style={{ color: "var(--color-text3)" }}>Launch the campaign to start calling contacts</p>
-                )}
-              </div>
-            ) : callsData.calls.map((call) => (
-              <button key={call.id} onClick={() => setSelectedCallId(call.id)}
-                className="flex items-center gap-3 px-3.5 py-3 rounded-[10px] border w-full text-left transition-all"
-                style={{
-                  background:   selectedCallId === call.id ? "var(--color-cyan-dim)" : "var(--color-bg2)",
-                  borderColor:  selectedCallId === call.id ? "rgba(0,212,255,0.25)" : "var(--color-border)",
-                  cursor: "pointer",
-                }}>
-                <div className="w-8 h-8 rounded-[8px] border flex items-center justify-center flex-shrink-0"
-                  style={{ background: "var(--color-bg3)", borderColor: "var(--color-border2)", color: CALL_STATUS_COLOR[call.status] ?? "var(--color-text2)" }}>
-                  {call.status === "active" ? <FiRadio size={13}/> : <FiPhone size={13}/>}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="font-medium truncate" style={{ color: "var(--color-text)" }}>{call.phone_to}</span>
-                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase flex-shrink-0"
-                      style={{ background: `${CALL_STATUS_COLOR[call.status] ?? "var(--color-text3)"}20`, color: CALL_STATUS_COLOR[call.status] ?? "var(--color-text3)" }}>
-                      {call.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[10px] mt-0.5" style={{ color: "var(--color-text3)" }}>
-                    <FiClock size={9}/> {fmtDuration(call.duration_secs)}
-                    {call.ended_at && <span>· {new Date(call.ended_at).toLocaleTimeString()}</span>}
-                  </div>
-                </div>
-                {call.status === "active" && (
-                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase"
-                    style={{ background: "rgba(0,212,255,0.15)", color: "var(--color-cyan)" }}>
-                    LIVE
-                  </span>
-                )}
-                <FiChevronRight size={12} style={{ color: "var(--color-text3)", flexShrink: 0 }}/>
-              </button>
-            ))}
+            <div>
+              <div className="text-[12px] text-[var(--color-text3)] font-medium mb-1">Total Calls</div>
+              <div className="text-[22px] font-semibold text-[var(--color-text)] font-disp">{totalCalls}</div>
+            </div>
           </div>
-
-          {/* Call detail */}
-          {selectedCallId
-            ? <CallDetailPanel callId={selectedCallId} onEnd={() => refetch()}/>
-            : (
-              <div className="flex flex-col items-center justify-center gap-3 rounded-[12px] border p-10"
-                style={{ background: "var(--color-bg2)", borderColor: "var(--color-border)", color: "var(--color-text3)" }}>
-                <FiPhone size={24}/><p className="text-xs">Select a call to view details and transcript</p>
-              </div>
-            )}
+          {/* Ended Calls */}
+          <div className="bg-[var(--color-bg2)] border border-[var(--color-border)] rounded-2xl p-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-[var(--color-bg3)] border border-[var(--color-border2)] flex items-center justify-center text-[var(--color-text3)]">
+              <FiCheckCircle size={16}/>
+            </div>
+            <div>
+              <div className="text-[12px] text-[var(--color-text3)] font-medium mb-1">Ended Calls</div>
+              <div className="text-[22px] font-semibold text-[var(--color-text)] font-disp">{endedCalls}</div>
+            </div>
+          </div>
+          {/* Picked Up Calls */}
+          <div className="bg-[var(--color-bg2)] border border-[var(--color-border)] rounded-2xl p-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-[var(--color-bg3)] border border-[var(--color-border2)] flex items-center justify-center text-[var(--color-text3)]">
+              <FiPhoneForwarded size={16}/>
+            </div>
+            <div>
+              <div className="text-[12px] text-[var(--color-text3)] font-medium mb-1">Picked Up Calls</div>
+              <div className="text-[22px] font-semibold text-[var(--color-text)] font-disp">{pickedUpCalls}</div>
+            </div>
+          </div>
+          {/* Voicemail Calls */}
+          <div className="bg-[var(--color-bg2)] border border-[var(--color-border)] rounded-2xl p-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-[var(--color-bg3)] border border-[var(--color-border2)] flex items-center justify-center text-[var(--color-text3)]">
+              <FiVoicemail size={16}/>
+            </div>
+            <div>
+              <div className="text-[12px] text-[var(--color-text3)] font-medium mb-1">Voicemail Calls</div>
+              <div className="text-[22px] font-semibold text-[var(--color-text)] font-disp">{voicemailCalls}</div>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* Call Results */}
+      <div className="flex flex-col gap-4 mt-2">
+        <h2 className="text-[16px] font-bold text-[var(--color-text)] tracking-wide font-disp">Call Results</h2>
+
+        <div className="w-full overflow-x-auto pb-20">
+          <table className="w-full text-left border-collapse min-w-[800px]">
+            <thead>
+              <tr className="border-b border-[var(--color-border)]">
+                <th className="py-4 px-4 w-12"><div className="w-4 h-4 rounded-[4px] border border-[var(--color-border2)] bg-[var(--color-bg2)]"></div></th>
+                <th className="py-4 px-4 text-[12px] font-semibold text-[var(--color-text3)] tracking-wider">Call ID</th>
+                <th className="py-4 px-4 text-[12px] font-semibold text-[var(--color-text3)] tracking-wider">Ended Reason</th>
+                <th className="py-4 px-4 text-[12px] font-semibold text-[var(--color-text3)] tracking-wider">Customer Phone</th>
+                <th className="py-4 px-4 text-[12px] font-semibold text-[var(--color-text3)] tracking-wider">Success Evaluation</th>
+                <th className="py-4 px-4 text-[12px] font-semibold text-[var(--color-text3)] tracking-wider">Duration</th>
+                <th className="py-4 px-4 text-[12px] font-semibold text-[var(--color-text3)] tracking-wider">Start Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {calls.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-[13px] text-[var(--color-text3)] border-b border-[var(--color-border)]">
+                    No calls recorded yet
+                  </td>
+                </tr>
+              ) : (
+                calls.map((call: any) => {
+                  const shortId = call.id.substring(0, 12) + "...";
+                  return (
+                    <tr key={call.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg2)] transition-colors group cursor-pointer" onClick={() => setSelectedCallId(call.id)}>
+                      <td className="py-4 px-4">
+                        <div className="w-4 h-4 rounded-[4px] border border-[var(--color-border2)] bg-[var(--color-bg2)] group-hover:border-[var(--color-text3)] transition-colors"></div>
+                      </td>
+                      <td className="py-4 px-4 text-[13px] text-[var(--color-text2)]">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-bg2)] border border-[var(--color-border)] rounded-lg w-fit">
+                          <span className="font-mono text-[11px]">{shortId}</span>
+                          <FiCopy className="text-[var(--color-text3)] hover:text-[var(--color-text)]" size={12} onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(call.id); }}/>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        {call.status === "active" ? (
+                           <svg className="animate-spin h-4 w-4 text-[var(--color-text3)]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                           </svg>
+                        ) : (
+                          <span className={`text-[11px] px-2.5 py-1 rounded-md font-bold uppercase ${
+                            call.status === "completed" ? "bg-[rgba(0,255,0,0.1)] text-[var(--color-green)]" :
+                            call.ended_reason === "customer-did-not-answer" || call.status === "no-answer" ? "bg-[#3A2A1A] text-[#E0A96D]" :
+                            call.status === "failed" ? "bg-[rgba(255,0,0,0.1)] text-[var(--color-red)]" :
+                            "bg-[var(--color-bg3)] text-[var(--color-text2)]"
+                          }`}>
+                            {call.ended_reason 
+                              ? call.ended_reason.replace(/-/g, ' ') 
+                              : (call.status === "no-answer" ? "Customer Did Not Answer" : call.status)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-4 px-4 text-[13px] text-[var(--color-text2)]">{call.phone_to}</td>
+                      <td className="py-4 px-4 text-[13px] text-[var(--color-text3)]">-</td>
+                      <td className="py-4 px-4 text-[13px] text-[var(--color-text3)]">{call.duration_secs ? fmtDuration(call.duration_secs) : "-"}</td>
+                      <td className="py-4 px-4 text-[13px] text-[var(--color-text3)]">{call.started_at ? new Date(call.started_at).toLocaleTimeString() : "-"}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Existing Call Details Popup/Modal */}
+      {selectedCallId && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setSelectedCallId(null)}>
+           <div className="max-w-[600px] w-full max-h-[90vh] overflow-y-auto bg-[var(--color-bg)] rounded-2xl border border-[var(--color-border)] shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
+             <div className="flex justify-between items-center mb-4">
+               <h3 className="text-lg font-bold">Call Report</h3>
+               <button onClick={() => setSelectedCallId(null)} className="text-[var(--color-text3)] hover:text-[var(--color-text)]"><FiX size={20}/></button>
+             </div>
+             <CallDetailPanel callId={selectedCallId} onEnd={() => { refetch(); setSelectedCallId(null); }}/>
+           </div>
+         </div>
+      )}
     </div>
   );
 }
