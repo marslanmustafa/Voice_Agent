@@ -5,6 +5,7 @@ import {
   callEnded,
   appendTranscript,
   setError,
+  setSpeaking,
   CallStatus,
 } from "@/store/slices/activeCallSlice";
 
@@ -65,6 +66,7 @@ export function useCallStream(callId: string | null): void {
                 speaker: payload.speaker === "user" ? "user" : "agent",
                 text,
                 timestamp: (payload.timestamp as number | null) ?? null,
+                secs: (payload.secs as number | null) ?? null,
                 isPartial: (payload.is_partial as boolean) ?? false,
               })
             );
@@ -83,6 +85,7 @@ export function useCallStream(callId: string | null): void {
           // ── Call ended (terminal) ─────────────────────────────────
           case "call-ended":
           case "end-of-call": {
+            dispatch(setSpeaking({ role: null }));
             dispatch(
               callEnded({
                 reason: payload.reason as string | undefined,
@@ -103,10 +106,23 @@ export function useCallStream(callId: string | null): void {
             break;
           }
 
-          // ── Speech update (can be used for talking indicators) ─────
-          case "speech-update":
-            // Ignore for now — talking indicators are optional
+          // ── Speech update — live talking indicator ─────────────────
+          case "speech-update": {
+            const role = payload.role as string;
+            const status = payload.status as string;
+            if (status === "started") {
+              dispatch(setSpeaking({ role: role === "user" ? "user" : "agent" }));
+            } else {
+              dispatch(setSpeaking({ role: null }));
+            }
             break;
+          }
+
+          // ── User interrupted assistant ─────────────────────────────
+          case "user-interrupted": {
+            dispatch(setSpeaking({ role: null }));
+            break;
+          }
 
           // ── Ignore other non-critical events ──────────────────────
           default:

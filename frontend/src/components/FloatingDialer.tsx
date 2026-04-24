@@ -273,6 +273,7 @@ function ActiveCallPanel({
   isMuted,
   isOnHold,
   error,
+  speakingRole,
   onMute,
   onHold,
   onEnd,
@@ -286,6 +287,7 @@ function ActiveCallPanel({
   isMuted: boolean;
   isOnHold: boolean;
   error: string | null;
+  speakingRole: "user" | "agent" | null;
   onMute: () => void;
   onHold: () => void;
   onEnd: () => void;
@@ -379,6 +381,36 @@ function ActiveCallPanel({
             </div>
           ))
         )}
+
+        {/* Live speaking indicator */}
+        {speakingRole && !isTerminal && (
+          <div
+            className="flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[11px]"
+            style={{
+              background: speakingRole === "user" ? "rgba(0,212,255,0.04)" : "rgba(255,255,255,0.02)",
+              border: `1px solid ${speakingRole === "user" ? "rgba(0,212,255,0.08)" : "var(--color-border)"}`,
+            }}
+          >
+            {/* Three animated dots */}
+            <span style={{ display: "flex", gap: 3, alignItems: "center" }}>
+              {[0, 0.15, 0.3].map((delay, k) => (
+                <span
+                  key={k}
+                  style={{
+                    width: 5, height: 5, borderRadius: "50%",
+                    background: speakingRole === "user" ? "var(--color-cyan)" : "var(--color-text3)",
+                    animation: `pulse 0.8s ease-in-out ${delay}s infinite`,
+                    display: "inline-block",
+                  }}
+                />
+              ))}
+            </span>
+            <span style={{ color: speakingRole === "user" ? "var(--color-cyan)" : "var(--color-text3)" }}>
+              {speakingRole === "user" ? "Customer" : "Agent"} is speaking…
+            </span>
+          </div>
+        )}
+
         <div ref={transcriptEndRef} />
       </div>
 
@@ -561,6 +593,7 @@ export function FloatingDialer() {
               isMuted={call.isMuted}
               isOnHold={call.isOnHold}
               error={call.error}
+              speakingRole={call.speakingRole}
               onMute={handleMute}
               onHold={handleHold}
               onEnd={handleEnd}

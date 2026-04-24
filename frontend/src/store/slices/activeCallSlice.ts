@@ -23,6 +23,7 @@ export interface TranscriptSegment {
   speaker: "user" | "agent";
   text: string;
   timestamp: number | string | null;
+  secs: number | null;    // secondsFromStart — used for deduplication
   isPartial?: boolean;
 }
 
@@ -39,6 +40,7 @@ export interface ActiveCallState {
   isMuted: boolean;
   isOnHold: boolean;
   error: string | null;
+  speakingRole: "user" | "agent" | null;  // who is currently speaking
 }
 
 const initialState: ActiveCallState = {
@@ -54,6 +56,7 @@ const initialState: ActiveCallState = {
   isMuted: false,
   isOnHold: false,
   error: null,
+  speakingRole: null,
 };
 
 const activeCallSlice = createSlice({
@@ -119,8 +122,15 @@ const activeCallSlice = createSlice({
 
     appendTranscript(state, action: PayloadAction<TranscriptSegment>) {
       const seg = action.payload;
-      console.log("[activeCallSlice] appendTranscript:", seg);
-      console.log("[activeCallSlice] Current state transcript length:", state.transcript.length);
+
+      // Deduplicate by secs (secondsFromStart) — conversation-update replays all
+      // past messages on every turn, so we skip ones we've already stored.
+      if (seg.secs !== null && seg.secs !== undefined) {
+        const alreadyExists = state.transcript.some(
+          (s) => s.secs === seg.secs && s.speaker === seg.speaker
+        );
+        if (alreadyExists) return;
+      }
 
       if (seg.isPartial) {
         // Replace the last partial from the same speaker, or append
@@ -147,7 +157,6 @@ const activeCallSlice = createSlice({
           state.transcript.push({ ...seg, isPartial: false });
         }
       }
-      console.log("[activeCallSlice] New state transcript length:", state.transcript.length);
     },
 
     // ── Controls ───────────────────────────────────────────────────────────
@@ -164,6 +173,10 @@ const activeCallSlice = createSlice({
       state.error = action.payload;
       state.status = "failed";
     },
+
+    setSpeaking(state, action: PayloadAction<{ role: "user" | "agent" | null }>) {
+      state.speakingRole = action.payload.role;
+    },
   },
 });
 
@@ -176,6 +189,7 @@ export const {
   setMuted,
   setOnHold,
   setError,
+  setSpeaking,
 } = activeCallSlice.actions;
 
 export default activeCallSlice.reducer;
