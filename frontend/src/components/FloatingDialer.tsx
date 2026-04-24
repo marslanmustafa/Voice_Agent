@@ -29,7 +29,7 @@ import {
   CallStatus, TranscriptSegment,
 } from "@/store/slices/activeCallSlice";
 import { useCallStream } from "@/hooks/useCallStream";
-import { useDialCallMutation, useEndCallMutation } from "@/store/api/allApis";
+import { useDialCallMutation, useEndCallMutation, useGetPhoneNumbersQuery, useGetContactsQuery } from "@/store/api/allApis";
 import { fmtDuration } from "@/lib/utils";
 
 // ─── Status display config ─────────────────────────────────────────────────
@@ -73,22 +73,61 @@ function DialPad({
   onDial,
   onClose,
 }: {
-  onDial: (phone: string, firstMessage?: string) => void;
+  onDial: (phone: string, phoneNumberId?: string, firstMessage?: string) => void;
   onClose: () => void;
 }) {
   const [phone, setPhone] = useState("");
+  const [selectedContactName, setSelectedContactName] = useState("");
+  const [phoneNumberId, setPhoneNumberId] = useState("");
   const [firstMsg, setFirstMsg] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [contactSearch, setContactSearch] = useState("");
+  const [showContactDrop, setShowContactDrop] = useState(false);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  // Fetch Vapi phone numbers (From)
+  const { data: phoneNumbers = [], isLoading: numLoading } = useGetPhoneNumbersQuery();
+
+  // Eagerly fetch contacts — load immediately, filter by search
+  const { data: contactsData } = useGetContactsQuery({ search: contactSearch || undefined, page: 1 });
+  const contacts = contactsData?.contacts ?? [];
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
+        setShowContactDrop(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const handleDial = () => {
-    if (phone.trim()) onDial(phone.trim(), firstMsg.trim() || undefined);
+    if (phone.trim()) onDial(phone.trim(), phoneNumberId || undefined, firstMsg.trim() || undefined);
   };
+
+  const selectContact = (c: any) => {
+    setPhone(c.phone);
+    setSelectedContactName(c.name);
+    setContactSearch("");
+    setShowContactDrop(false);
+  };
+
+  // Filtered contacts based on search input
+  const filteredContacts = contactSearch
+    ? contacts.filter((c: any) =>
+        c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+        c.phone.includes(contactSearch)
+      )
+    : contacts;
 
   return (
     <div
-      className="absolute bottom-16 right-0 w-72 rounded-[16px] border p-4 flex flex-col gap-3 shadow-2xl"
+      className="absolute bottom-16 right-0 w-80 rounded-[16px] border p-4 flex flex-col gap-3 shadow-2xl"
       style={{ background: "var(--color-bg)", borderColor: "var(--color-border)" }}
     >
+      {/* Title */}
       <div className="flex items-center justify-between">
         <span className="text-sm font-bold" style={{ color: "var(--color-text)" }}>New Call</span>
         <button onClick={onClose} style={{ color: "var(--color-text3)", cursor: "pointer" }}>
@@ -96,21 +135,88 @@ function DialPad({
         </button>
       </div>
 
-      {/* Phone number input */}
-      <input
-        autoFocus
-        type="tel"
-        placeholder="+1 (555) 000-0000"
-        value={phone}
-        onChange={(e) => setPhone(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && handleDial()}
-        className="w-full px-3 py-2 rounded-[8px] border text-sm outline-none"
-        style={{
-          background: "var(--color-bg2)",
-          borderColor: "var(--color-border)",
-          color: "var(--color-text)",
-        }}
-      />
+      {/* Phone number selector (Vapi numbers) — FROM */}
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: "var(--color-text2)" }}>
+          From
+        </label>
+        <select
+          value={phoneNumberId}
+          onChange={(e) => setPhoneNumberId(e.target.value)}
+          className="w-full px-3 py-2 rounded-[8px] border text-xs outline-none appearance-none"
+          style={{
+            background: "var(--color-bg2)",
+            borderColor: "var(--color-border)",
+            color: phoneNumberId ? "var(--color-text)" : "var(--color-text3)",
+            cursor: "pointer",
+          }}
+        >
+          <option value="">{numLoading ? "Loading numbers…" : phoneNumbers.length === 0 ? "Use Twilio fallback" : "Select a phone number"}</option>
+          {phoneNumbers.map((n: any) => (
+            <option key={n.id} value={n.id}>
+              {n.number || n.name || n.id}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Contact picker — TO */}
+      <div className="flex flex-col gap-1 relative" ref={dropRef}>
+        <label className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: "var(--color-text2)" }}>
+          To {selectedContactName && <span style={{ color: "var(--color-cyan)", textTransform: "none", fontWeight: 400 }}>— {selectedContactName}</span>}
+        </label>
+        <input
+          autoFocus
+          type="tel"
+          placeholder="Search contacts or type a number…"
+          value={contactSearch || phone}
+          onChange={(e) => {
+            const v = e.target.value;
+            setContactSearch(v);
+            setPhone(v);
+            setSelectedContactName("");
+            setShowContactDrop(true);
+          }}
+          onFocus={() => setShowContactDrop(true)}
+          onKeyDown={(e) => e.key === "Enter" && handleDial()}
+          className="w-full px-3 py-2 rounded-[8px] border text-sm outline-none"
+          style={{
+            background: "var(--color-bg2)",
+            borderColor: showContactDrop ? "var(--color-cyan)" : "var(--color-border)",
+            color: "var(--color-text)",
+            transition: "border-color 0.15s",
+          }}
+        />
+
+        {/* Contact dropdown — shown on focus */}
+        {showContactDrop && (
+          <div
+            className="absolute top-full left-0 right-0 z-50 mt-1 rounded-[10px] border overflow-hidden shadow-xl"
+            style={{ background: "var(--color-bg)", borderColor: "var(--color-border)", maxHeight: 200, overflowY: "auto" }}
+          >
+            {filteredContacts.length === 0 ? (
+              <div className="px-3 py-3 text-[11px] text-center" style={{ color: "var(--color-text3)" }}>
+                {contactSearch ? "No contacts match" : "No contacts yet — add some first"}
+              </div>
+            ) : (
+              filteredContacts.slice(0, 8).map((c: any) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); selectContact(c); }}
+                  className="w-full text-left px-3 py-2.5 flex items-center gap-2 text-xs border-b last:border-0"
+                  style={{ borderColor: "var(--color-border)", background: "transparent", color: "var(--color-text)", cursor: "pointer" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,212,255,0.06)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <span className="font-semibold truncate flex-1">{c.name}</span>
+                  <span style={{ color: "var(--color-text3)", fontFamily: "var(--font-mono)", fontSize: 10 }}>{c.phone}</span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Advanced toggle */}
       <button
@@ -193,8 +299,7 @@ function ActiveCallPanel({
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript]);
 
-  // const isTerminal = ["ended", "failed", "no-answer", "busy", "cancelled"].includes(status);
-  const isTerminal = true
+  const isTerminal = ["ended", "failed", "no-answer", "busy", "cancelled"].includes(status);
 
   return (
     <div
@@ -283,7 +388,6 @@ function ActiveCallPanel({
           className="flex items-center justify-between px-4 py-3 border-t"
           style={{ borderColor: "var(--color-border)" }}
         >
-          {/* Mute */}
           <ControlButton
             onClick={onMute}
             active={isMuted}
@@ -292,7 +396,6 @@ function ActiveCallPanel({
             icon={isMuted ? <FiMicOff size={14} /> : <FiMic size={14} />}
           />
 
-          {/* Hold */}
           <ControlButton
             onClick={onHold}
             active={isOnHold}
@@ -301,7 +404,6 @@ function ActiveCallPanel({
             icon={isOnHold ? <FiPlay size={14} /> : <FiPause size={14} />}
           />
 
-          {/* End call */}
           <button
             onClick={onEnd}
             className="flex flex-col items-center gap-1 px-3 py-2 rounded-[10px] transition-all"
@@ -379,10 +481,14 @@ export function FloatingDialer() {
   const elapsed = useCallTimer(call.startedAt, call.status);
 
   const handleDial = useCallback(
-    async (phone: string, firstMessage?: string) => {
+    async (phone: string, phoneNumberId?: string, firstMessage?: string) => {
       setPanelOpen(false);
       try {
-        const result = await dialCall({ phone_to: phone, first_message: firstMessage }).unwrap();
+        const result = await dialCall({
+          phone_to: phone,
+          phone_number_id: phoneNumberId,
+          first_message: firstMessage,
+        }).unwrap();
         dispatch(
           callInitiated({
             callId: result.call_id,

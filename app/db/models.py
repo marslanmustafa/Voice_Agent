@@ -84,7 +84,29 @@ class Contact(Base):
 # ── DB init helper ─────────────────────────────────────────────────────────────
 
 async def init_db() -> None:
-    """Create all tables (used at startup)."""
-    from app.db.database import engine
+    """Create all tables and seed the system user (used at startup)."""
+    from app.db.database import engine, async_session_maker
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    # 1. Create tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # 2. Seed the system user — upsert so it's idempotent on every restart
+    system_user_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+    async with async_session_maker() as session:
+        stmt = (
+            pg_insert(User)
+            .values(
+                id=system_user_id,
+                email="system@voiceagent.local",
+                name="System",
+                provider="system",
+                password_hash=None,
+                avatar_url=None,
+            )
+            .on_conflict_do_nothing(index_elements=["id"])
+        )
+        await session.execute(stmt)
+        await session.commit()
+

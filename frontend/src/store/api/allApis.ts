@@ -103,7 +103,7 @@ export const callsApi = baseApi.injectEndpoints({
       query: (id) => ({ url: `/calls/${id}/end`, method: "POST" }),
       invalidatesTags: ["Calls"],
     }),
-    dialCall: b.mutation<{ ok: boolean; call_id: string; listen_url?: string }, { phone_to: string; system_prompt?: string; first_message?: string }>({
+    dialCall: b.mutation<{ ok: boolean; call_id: string; listen_url?: string; control_url?: string }, { phone_to: string; phone_number_id?: string; system_prompt?: string; first_message?: string }>({
       query: (body) => ({ url: "/calls/dial", method: "POST", body }),
       invalidatesTags: ["Calls"],
     }),

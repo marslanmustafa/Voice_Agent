@@ -37,8 +37,11 @@ logger = logging.getLogger(__name__)
 
 class DialRequest(BaseModel):
     phone_to: str
+    phone_number_id: Optional[str] = None
     system_prompt: Optional[str] = None
     first_message: Optional[str] = None
+
+
 
 
 def _parse_vapi_call(v: dict, contact_map: dict) -> CallResponse:
@@ -166,6 +169,7 @@ async def dial_call(
         resp = await vapi_service.create_outbound_call(
             assistant_id=assistant_id,
             customer_number=body.phone_to,
+            phone_number_id=body.phone_number_id or None,
             first_message=body.first_message,
             system_prompt=body.system_prompt,
         )

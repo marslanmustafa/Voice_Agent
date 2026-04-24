@@ -47,7 +47,9 @@ app.add_middleware(
     allow_origins=[
         settings.FRONTEND_URL,
         "http://localhost:3000",
+        "http://localhost:3001",
         "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
         "https://q641qxfx-3000.inc1.devtunnels.ms",
         "https://voice-agent-fyp.vercel.app",
         "https://voice.marslanmustafa.com"

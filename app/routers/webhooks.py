@@ -17,15 +17,41 @@ Register in Vapi Dashboard → Settings → Webhooks → Server URL:
   https://yourdomain.com/webhooks/vapi
 """
 
+import asyncio
 import json
 import logging
+from datetime import datetime, timezone
+from pathlib import Path
 
+import aiofiles
 from fastapi import APIRouter, Request, Response
 
 from app.services.ws_manager import ws_manager
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 logger = logging.getLogger(__name__)
+
+# ── Webhook file logger ────────────────────────────────────────────────────────
+
+LOGS_DIR = Path("logs")
+LOGS_DIR.mkdir(exist_ok=True)
+
+
+async def _log_webhook(body: dict, msg_type: str, call_id: str | None) -> None:
+    """Append the raw webhook payload to a daily JSONL log file (fire-and-forget)."""
+    now = datetime.now(timezone.utc)
+    log_file = LOGS_DIR / f"webhooks_{now.strftime('%Y-%m-%d')}.jsonl"
+    entry = {
+        "ts":       now.isoformat(),
+        "type":     msg_type,
+        "call_id":  call_id,
+        "payload":  body,
+    }
+    try:
+        async with aiofiles.open(log_file, mode="a", encoding="utf-8") as f:
+            await f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as exc:
+        logger.warning(f"[Webhook] Failed to write log: {exc}")
 
 # Vapi status → our UI status label
 STATUS_MAP = {
@@ -72,7 +98,10 @@ async def vapi_webhook(request: Request):
     msg_type = msg.get("type", "")
     call_id = _extract_call_id(body)
 
-    logger.info(f"[Webhook] type={msg_type!r} call={call_id} payload={body}")
+    logger.info(f"[Webhook] type={msg_type!r} call={call_id}")
+
+    # Fire-and-forget: write raw payload to daily log file
+    asyncio.create_task(_log_webhook(body, msg_type, call_id))
 
     if not call_id:
         logger.debug(f"[Webhook] No call_id for event type={msg_type!r} — skipping")
@@ -84,7 +113,6 @@ async def vapi_webhook(request: Request):
         transcript_type = msg.get("transcriptType", "final")      # "partial" | "final"
         text = msg.get("transcript", "") or msg.get("message", "") or msg.get("text", "")
         if text:
-            import asyncio
             asyncio.create_task(ws_manager.broadcast(call_id, {
                 "type":       "transcript",
                 "speaker":    "user" if role == "user" else "agent",
@@ -106,8 +134,6 @@ async def vapi_webhook(request: Request):
             msg.get("summary")
             or msg.get("analysis", {}).get("summary")
         )
-
-        import asyncio
 
         # Publish each message in the transcript history individually
         # so the SSE consumer can display the full conversation
@@ -138,7 +164,6 @@ async def vapi_webhook(request: Request):
     # ── Call status update ───────────────────────────────────────────────────
     elif msg_type in ("call-status-update", "status-update"):
         raw_status = msg.get("status", "unknown")
-        import asyncio
         asyncio.create_task(ws_manager.broadcast(call_id, {
             "type":   "status-update",
             "status": STATUS_MAP.get(raw_status, raw_status),
@@ -147,7 +172,6 @@ async def vapi_webhook(request: Request):
 
     # ── Call started ─────────────────────────────────────────────────────────
     elif msg_type == "call-started":
-        import asyncio
         asyncio.create_task(ws_manager.broadcast(call_id, {
             "type":   "status-update",
             "status": "active",
@@ -157,7 +181,6 @@ async def vapi_webhook(request: Request):
     # ── Call ended (simple terminal signal) ──────────────────────────────────
     elif msg_type in ("call-ended", "call-end"):
         ended_reason = msg.get("endedReason", "completed")
-        import asyncio
         asyncio.create_task(ws_manager.broadcast(call_id, {
             "type":         "call-ended",
             "status":       STATUS_MAP.get(ended_reason, ended_reason),
@@ -166,7 +189,6 @@ async def vapi_webhook(request: Request):
 
     # ── Voicemail detected ───────────────────────────────────────────────────
     elif msg_type in ("voicemail", "voicemail-detected"):
-        import asyncio
         asyncio.create_task(ws_manager.broadcast(call_id, {
             "type":   "status-update",
             "status": "voicemail",
@@ -174,7 +196,6 @@ async def vapi_webhook(request: Request):
 
     # ── Speech update (talking indicators) ───────────────────────────────────
     elif msg_type == "speech-update":
-        import asyncio
         asyncio.create_task(ws_manager.broadcast(call_id, {
             "type":   "speech-update",
             "role":   msg.get("role", "unknown"),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { FiPlus, FiSearch, FiDownload, FiUpload, FiTrash2, FiX, FiCheck, FiUsers } from "react-icons/fi";
+import { FiPlus, FiSearch, FiDownload, FiUpload, FiTrash2, FiX, FiCheck, FiUsers, FiAlertCircle } from "react-icons/fi";
 import { useGetContactsQuery, useCreateContactMutation, useDeleteContactMutation, useImportCsvMutation } from "@/store/api/allApis";
 import type { Contact } from "@/types";
 
@@ -17,6 +17,8 @@ export default function ContactsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ name: "", phone: "", email: "", tag: "" });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const { data, isLoading, refetch } = useGetContactsQuery({ search: search || undefined });
   const [createContact] = useCreateContactMutation();
@@ -24,11 +26,30 @@ export default function ContactsPage() {
   const [importCsv]     = useImportCsvMutation();
 
   const handleAdd = async () => {
-    if (!form.name || !form.phone) return;
-    await createContact(form as any);
-    setForm({ name: "", phone: "", email: "", tag: "" });
+    if (!form.name.trim() || !form.phone.trim()) {
+      setFormError("Name and phone number are required.");
+      return;
+    }
+    setSaving(true);
+    setFormError(null);
+    try {
+      await createContact(form as any).unwrap();
+      setForm({ name: "", phone: "", email: "", tag: "" });
+      setShowAdd(false);
+      refetch();
+    } catch (err: any) {
+      // Show the backend error message (e.g. 409 "Contact with this phone already exists")
+      const detail = err?.data?.detail ?? err?.error ?? "Failed to save contact. Check the phone number format.";
+      setFormError(detail);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCloseForm = () => {
     setShowAdd(false);
-    refetch();
+    setFormError(null);
+    setForm({ name: "", phone: "", email: "", tag: "" });
   };
 
   const handleDelete = async (id: string) => {
@@ -40,7 +61,7 @@ export default function ContactsPage() {
     const file = e.target.files?.[0]; if (!file) return;
     const fd = new FormData(); fd.append("file", file);
     const res = await importCsv(fd) as any;
-    alert(`Imported: ${res.data?.imported ?? 0}, Skipped: ${res.data?.skipped ?? 0}`);
+    alert(`Imported: ${res.data?.imported ?? 0}, Skipped: ${res.data?.skipped ?? 0}${res.data?.errors?.length ? `\nErrors: ${res.data.errors.slice(0, 3).join(", ")}` : ""}`);
     refetch(); if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -48,6 +69,7 @@ export default function ContactsPage() {
     const blob = new Blob(["name,phone,email,tag,notes\nJohn Doe,+12345678901,john@example.com,Lead,Follow up\n"], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "contacts_template.csv"; a.click();
   };
+
 
   return (
     <div className="flex flex-col gap-5">
@@ -89,22 +111,44 @@ export default function ContactsPage() {
         <div className="p-5 rounded-[14px] border flex flex-col gap-4" style={S.card}>
           <div className="flex justify-between items-center">
             <h3 className="text-[15px] font-bold" style={{ fontFamily: "var(--font-disp)", color: "var(--color-text)" }}>New Contact</h3>
-            <button onClick={() => setShowAdd(false)} style={{ background: "none", border: "none", color: "var(--color-text3)", cursor: "pointer" }}><FiX size={13}/></button>
+            <button onClick={handleCloseForm} style={{ background: "none", border: "none", color: "var(--color-text3)", cursor: "pointer" }}><FiX size={13}/></button>
           </div>
+
+          {/* Error banner */}
+          {formError && (
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-[10px] text-xs"
+              style={{ background: "rgba(255,80,80,0.08)", border: "1px solid rgba(255,80,80,0.2)", color: "var(--color-red)" }}>
+              <FiAlertCircle size={13} className="shrink-0 mt-0.5" />
+              <span>{formError}</span>
+            </div>
+          )}
+
           <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>
-            {[["Full Name*","text","name"],["Phone*","text","phone"],["Email","email","email"],["Tag","text","tag"]].map(([lbl,type,key]) => (
+            {[["Full Name*","text","name"],["Phone*","tel","phone"],["Email","email","email"],["Tag","text","tag"]].map(([lbl,type,key]) => (
               <div key={key} className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-text2)" }}>{lbl}</label>
                 <input type={type} value={(form as any)[key]} onChange={(e) => setForm({...form, [key]: e.target.value})}
                   style={S.input}
+                  disabled={saving}
                   onFocus={(e) => e.currentTarget.style.borderColor = "var(--color-cyan)"}
                   onBlur={(e)  => e.currentTarget.style.borderColor = "var(--color-border2)"}/>
               </div>
             ))}
           </div>
           <div className="flex justify-end gap-2 pt-3 border-t" style={{ borderColor: "var(--color-border)" }}>
-            <button style={S.btnGhost} onClick={() => setShowAdd(false)}>Cancel</button>
-            <button style={S.btnPrimary} onClick={handleAdd} disabled={!form.name || !form.phone}><FiCheck size={12}/> Save Contact</button>
+            <button style={S.btnGhost} onClick={handleCloseForm} disabled={saving}>Cancel</button>
+            <button style={{
+              ...S.btnPrimary,
+              opacity: (saving || !form.name.trim() || !form.phone.trim()) ? 0.6 : 1,
+              cursor: (saving || !form.name.trim() || !form.phone.trim()) ? "not-allowed" : "pointer",
+            }} onClick={handleAdd} disabled={saving || !form.name.trim() || !form.phone.trim()}>
+              {saving ? (
+                <span className="w-3 h-3 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#000", borderTopColor: "transparent" }} />
+              ) : (
+                <FiCheck size={12}/>
+              )}
+              {saving ? "Saving…" : "Save Contact"}
+            </button>
           </div>
         </div>
       )}

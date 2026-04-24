@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { FiArrowLeft, FiPlus, FiPlay, FiActivity, FiInfo, FiDownload, FiFileText, FiClock } from "react-icons/fi";
+import { FiArrowLeft, FiPlay, FiActivity, FiInfo, FiClock, FiSearch, FiX, FiUsers } from "react-icons/fi";
 import { useCreateCampaignMutation, useStartCampaignMutation, useGetContactsQuery, useGetConfigQuery, useGetPhoneNumbersQuery } from "@/store/api/allApis";
 import { Skeleton } from "boneyard-js/react";
 
@@ -25,8 +25,11 @@ export default function CreateCampaignPage() {
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [scheduleType, setScheduleType] = useState<"now" | "later">("later");
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+  const [contactSearch, setContactSearch] = useState("");
+  const [showContactDrop, setShowContactDrop] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const { data: contactsData } = useGetContactsQuery({});
+  const contactDropRef = useRef<HTMLDivElement>(null);
+  const { data: contactsData } = useGetContactsQuery({ search: contactSearch || undefined });
   const { data: configData } = useGetConfigQuery();
   const { data: phoneNumbersData } = useGetPhoneNumbersQuery();
 
@@ -42,6 +45,24 @@ export default function CreateCampaignPage() {
       setForm(prev => ({ ...prev, assistantId: configData.vapi_assistant_id || "" }));
     }
   }, [configData]);
+
+  // Close contact dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (contactDropRef.current && !contactDropRef.current.contains(e.target as Node)) {
+        setShowContactDrop(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const allContacts = contactsData?.contacts ?? [];
+  const toggleContact = (id: string) => {
+    setSelectedContacts(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -198,8 +219,8 @@ export default function CreateCampaignPage() {
             </div>
           </div>
 
-          {/* Upload CSV */}
-          {!campaignId && (
+          {/* Upload CSV — commented out, using contact picker instead */}
+          {/* {!campaignId && (
             <div>
               <div className="flex justify-between items-center mb-2">
                 <label className="block text-[13px] font-medium text-[var(--color-text)]">Upload CSV</label>
@@ -211,6 +232,119 @@ export default function CreateCampaignPage() {
                 <FiFileText className="text-[var(--color-text3)] mb-4 group-hover:text-[var(--color-text2)] transition-colors" size={32} />
                 <div className="text-[13px] text-[var(--color-text2)] mb-1">Drag and drop a CSV file here or click to select file locally</div>
                 <div className="text-[12px] text-[var(--color-text3)]">Maximum file size: 5MB</div>
+              </div>
+            </div>
+          )} */}
+
+          {/* Select Contacts (multi-select from DB) */}
+          {!campaignId && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-[13px] font-medium text-[var(--color-text)] flex items-center gap-1.5">
+                  <FiUsers size={13} /> Contacts to Call
+                  {selectedContacts.length > 0 && (
+                    <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: "var(--color-cyan-dim)", color: "var(--color-cyan)" }}>
+                      {selectedContacts.length} selected
+                    </span>
+                  )}
+                </label>
+                {selectedContacts.length > 0 && (
+                  <button
+                    onClick={() => setSelectedContacts([])}
+                    className="text-[11px] flex items-center gap-1"
+                    style={{ color: "var(--color-text3)", background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    <FiX size={11} /> Clear all
+                  </button>
+                )}
+              </div>
+
+              {/* Selected contact tags */}
+              {selectedContacts.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {selectedContacts.map(id => {
+                    const c = allContacts.find((x: any) => x.id === id);
+                    if (!c) return null;
+                    return (
+                      <span key={id} className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium"
+                        style={{ background: "var(--color-cyan-dim)", color: "var(--color-cyan)", border: "1px solid rgba(0,212,255,0.2)" }}>
+                        {c.name}
+                        <button onClick={() => toggleContact(id)} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", display: "flex", padding: 0 }}>
+                          <FiX size={10} />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Search + dropdown */}
+              <div className="relative" ref={contactDropRef}>
+                <div className="flex items-center gap-2 bg-[var(--color-bg2)] border border-[var(--color-border)] rounded-xl px-3 py-2.5"
+                  style={{ borderColor: showContactDrop ? "var(--color-cyan)" : "var(--color-border)", transition: "border-color 0.15s" }}>
+                  <FiSearch size={13} style={{ color: "var(--color-text3)", flexShrink: 0 }} />
+                  <input
+                    type="text"
+                    placeholder="Search contacts by name or phone…"
+                    value={contactSearch}
+                    onChange={e => setContactSearch(e.target.value)}
+                    onFocus={() => setShowContactDrop(true)}
+                    className="flex-1 bg-transparent text-[13px] outline-none"
+                    style={{ color: "var(--color-text)", caretColor: "var(--color-cyan)" }}
+                  />
+                  {contactSearch && (
+                    <button onClick={() => setContactSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text3)", display: "flex" }}>
+                      <FiX size={12} />
+                    </button>
+                  )}
+                </div>
+
+                {showContactDrop && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-[12px] border overflow-hidden shadow-2xl"
+                    style={{ background: "var(--color-bg)", borderColor: "var(--color-border)", maxHeight: 240, overflowY: "auto" }}>
+                    {allContacts.length === 0 ? (
+                      <div className="px-4 py-4 text-[12px] text-center" style={{ color: "var(--color-text3)" }}>
+                        No contacts found. <Link href="/contacts" className="underline" style={{ color: "var(--color-cyan)" }}>Add contacts first →</Link>
+                      </div>
+                    ) : (
+                      allContacts.map((c: any) => {
+                        const isSelected = selectedContacts.includes(c.id);
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onMouseDown={e => { e.preventDefault(); toggleContact(c.id); }}
+                            className="w-full text-left px-4 py-2.5 flex items-center gap-3 text-[13px] border-b last:border-0 transition-colors"
+                            style={{
+                              borderColor: "var(--color-border)",
+                              background: isSelected ? "rgba(0,212,255,0.06)" : "transparent",
+                              color: "var(--color-text)",
+                              cursor: "pointer",
+                            }}
+                            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+                            onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
+                          >
+                            {/* Checkbox */}
+                            <span className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border transition-colors"
+                              style={{
+                                background: isSelected ? "var(--color-cyan)" : "transparent",
+                                borderColor: isSelected ? "var(--color-cyan)" : "var(--color-border2)",
+                              }}>
+                              {isSelected && (
+                                <svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              )}
+                            </span>
+                            <span className="flex-1 font-medium truncate">{c.name}</span>
+                            <span className="text-[11px] font-mono" style={{ color: "var(--color-text3)" }}>{c.phone}</span>
+                            {c.tag && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "var(--color-bg3)", color: "var(--color-text2)" }}>{c.tag}</span>
+                            )}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}

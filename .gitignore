@@ -56,3 +56,6 @@ coverage.xml
 *.seed
 *.pid.lock
 alembic/versions/*.pyc
+
+# Webhook logs
+logs/
