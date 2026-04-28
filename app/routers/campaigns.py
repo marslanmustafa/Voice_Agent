@@ -119,52 +119,44 @@ async def update_campaign(
         logger.exception("Unexpected error in update_campaign")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.post("/create", response_model=CampaignResponse, status_code=201)
 async def create_campaign(
     body: CreateCampaignDTO,
     user: User = Depends(get_current_user),
 ):
-    """
-    Proxies requests to Vapi's /campaign endpoint.
-
-    phoneNumberId is required per Vapi documentation. If not provided,
-    attempts to fetch assistantId from env (VAPI_ASSISTANT_ID).
-
-    Customers (contacts) can be provided during creation and will be
-    added to the campaign immediately after creation.
-    """
-    # Validate phoneNumberId is a valid UUID
     try:
-        uuid.UUID(body.phoneNumberId)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="phoneNumberId must be a valid UUID")
+        assistant_id = body.assistantId or settings.VAPI_ASSISTANT_ID
 
-    # If assistantId not provided, fall back to env var
-    assistant_id = body.assistantId or settings.VAPI_ASSISTANT_ID or None
+        if not assistant_id:
+            raise HTTPException(
+                status_code=400,
+                detail="assistantId is required"
+            )
 
-    if not assistant_id:
-        raise HTTPException(
-            status_code=400,
-            detail="assistantId is required. Configure it in Settings or provide it explicitly.",
-        )
+        # Build payload
+        payload = body.model_dump(exclude_unset=True, exclude_none=True)
+        payload["assistantId"] = assistant_id
 
-    # Build payload with validated assistantId
-    payload = body.model_dump(exclude_unset=True, exclude_none=True)
-    payload["assistantId"] = assistant_id
+        # 🔥 CRITICAL FIX: DO NOT POP customers
+        # Instead normalize them properly
+        if "customers" in payload and payload["customers"]:
+            payload["customers"] = [
+                {
+                    "phoneNumber": c.get("phoneNumber") or c.get("number"),
+                    "name": c.get("name"),
+                    "email": c.get("email"),
+                }
+                for c in payload["customers"]
+            ]
 
-    # Extract customers before sending to Vapi (Vapi creates campaign first, then contacts)
-    customers = payload.pop("customers", None)
+            # remove invalid entries
+            payload["customers"] = [
+                c for c in payload["customers"]
+                if c.get("phoneNumber")
+            ]
 
-    try:
+        # 🚀 SINGLE CALL ONLY (NO SECOND STEP)
         resp = await vapi_service.create_campaign(payload)
-
-        # Add contacts to the campaign if provided
-        if customers:
-            contact_payload = [c.model_dump(exclude_unset=True, exclude_none=True) if hasattr(c, 'model_dump') else c for c in customers]
-            contact_payload = [c for c in contact_payload if c]  # Filter empty dicts
-            if contact_payload:
-                await vapi_service.add_campaign_contacts(resp.get("id"), contact_payload)
 
         return CampaignResponse(
             id=resp.get("id"),
@@ -172,12 +164,13 @@ async def create_campaign(
             status=resp.get("status", "draft"),
             created_at=resp.get("createdAt", ""),
         )
+
     except VapiError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
-    except Exception as e:
-        logger.exception("Unexpected error in create_campaign")
-        raise HTTPException(status_code=500, detail=str(e))
 
+    except Exception as e:
+        logger.exception("create_campaign failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{campaign_id}/contacts")
 async def add_campaign_contacts(

@@ -12,7 +12,7 @@ class AssistantOverrides(BaseModel):
     pass
 
 class CreateCustomerDTO(BaseModel):
-    number: Optional[str] = None
+    phoneNumber: Optional[str] = None
     sipUri: Optional[str] = None
     extension: Optional[str] = None
     name: Optional[str] = None
